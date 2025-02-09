@@ -31,6 +31,14 @@ impl Lexer {
         self.read_position += 1;
     }
 
+    fn peek_char(&mut self) -> Option<char> {
+        if self.read_position >= self.input.len() {
+            None
+        } else {
+            Some(self.input.chars().nth(self.read_position).unwrap())
+        }
+    }
+
     fn read_number(&mut self) -> String {
         let start_pos = self.position;
 
@@ -71,16 +79,63 @@ impl Lexer {
 
     pub fn next_token(&mut self) -> Token {
         match self.ch {
-            Some(';') => {
-                let tok = new_token(TokenType::Semicolon, self.ch.unwrap());
-                self.read_char();
-                tok
-            }
+            // Operators
             Some('=') => {
-                let tok = new_token(TokenType::Assign, self.ch.unwrap());
+                match self.peek_char() {
+                    Some('=') => {
+                        self.read_char();
+                        let tok = Token::new(TokenType::Eq, "==".to_string());
+                        self.read_char();
+                        tok
+                    }
+                    _ => {
+                        let tok = new_token(TokenType::Assign, self.ch.unwrap());
+                        self.read_char();
+                        tok
+                    }
+                }
+            }
+            Some('-') => {
+                let tok = new_token(TokenType::Minus, self.ch.unwrap());
                 self.read_char();
                 tok
             }
+            Some('!') => {
+                match self.peek_char() {
+                    Some('=') => {
+                        self.read_char();
+                        let tok = Token::new(TokenType::NotEq, "!=".to_string());
+                        self.read_char();
+                        tok
+                    }
+                    _ => {
+                        let tok = new_token(TokenType::Bang, self.ch.unwrap());
+                        self.read_char();
+                        tok
+                    }
+                }
+            }
+            Some('/') => {
+                let tok = new_token(TokenType::Slash, self.ch.unwrap());
+                self.read_char();
+                tok
+            }
+            Some('*') => {
+                let tok = new_token(TokenType::Asterisk, self.ch.unwrap());
+                self.read_char();
+                tok
+            }
+            Some('<') => {
+                let tok = new_token(TokenType::LT, self.ch.unwrap());
+                self.read_char();
+                tok
+            }
+            Some('>') => {
+                let tok = new_token(TokenType::GT, self.ch.unwrap());
+                self.read_char();
+                tok
+            }
+            // Delimiters
             Some('(') => {
                 let tok = new_token(TokenType::Lparen, self.ch.unwrap());
                 self.read_char();
@@ -111,6 +166,12 @@ impl Lexer {
                 self.read_char();
                 tok
             }
+            Some(';') => {
+                let tok = new_token(TokenType::Semicolon, self.ch.unwrap());
+                self.read_char();
+                tok
+            }
+            // EOF
             None => Token::new(TokenType::Eof, String::new()),
             Some(ch) => {
                 if ch.is_whitespace() {
@@ -210,6 +271,63 @@ mod tests {
     }
 
     #[test]
+    fn test_new_token_multi_char_symbols() {
+        let input = "10 == 10;\n\
+                10!= 9;\n\
+             ";
+
+        let tests = vec![
+            (TokenType::Int, "10"),
+            (TokenType::Eq, "=="),
+            (TokenType::Int, "10"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Int, "10"),
+            (TokenType::NotEq, "!="),
+            (TokenType::Int, "9"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Eof, ""),
+        ];
+
+        let lexer = Lexer::new(input.to_string());
+        test_case_assertions(lexer, tests)
+    }
+
+    #[test]
+    fn test_next_token_keywords() {
+        let input = "if (5 < 10) {\n\
+                return true;\n\
+             } else {\n\
+                return false;\n\
+             }\n\
+             ";
+
+        let tests = vec![
+            (TokenType::If, "if"),
+            (TokenType::Lparen, "("),
+            (TokenType::Int, "5"),
+            (TokenType::LT, "<"),
+            (TokenType::Int, "10"),
+            (TokenType::Rparen, ")"),
+            (TokenType::Lbrace, "{"),
+            (TokenType::Return, "return"),
+            (TokenType::True, "true"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Rbrace, "}"),
+            (TokenType::Else, "else"),
+            (TokenType::Lbrace, "{"),
+            (TokenType::Return, "return"),
+            (TokenType::False, "false"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Rbrace, "}"),
+            (TokenType::Eof, ""),
+        ];
+
+        let lexer = Lexer::new(input.to_string());
+
+        test_case_assertions(lexer, tests)
+    }
+
+    #[test]
     fn test_next_token_snippet() {
         let input = "let five = 5;\n\
              let ten = 10;\n\
@@ -217,6 +335,8 @@ mod tests {
              x + y;\n\
              };\n\
              let result = add(five, ten);\n\
+             !-/*5;
+             5 <10 > 5;\n\
              ";
 
         let tests = vec![
@@ -255,6 +375,18 @@ mod tests {
             (TokenType::Comma, ","),
             (TokenType::Ident, "ten"),
             (TokenType::Rparen, ")"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Bang, "!"),
+            (TokenType::Minus, "-"),
+            (TokenType::Slash, "/"),
+            (TokenType::Asterisk, "*"),
+            (TokenType::Int, "5"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Int, "5"),
+            (TokenType::LT, "<"),
+            (TokenType::Int, "10"),
+            (TokenType::GT, ">"),
+            (TokenType::Int, "5"),
             (TokenType::Semicolon, ";"),
             (TokenType::Eof, ""),
         ];

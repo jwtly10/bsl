@@ -13,6 +13,16 @@ pub enum TokenType {
     // Operators
     Assign,
     Plus,
+    Minus,
+    Bang,
+    Asterisk,
+    Slash,
+
+    LT,
+    GT,
+
+    Eq,
+    NotEq,
 
     // Delimiters
     Comma,
@@ -26,6 +36,11 @@ pub enum TokenType {
     // Keywords
     Function,
     Let,
+    True,
+    False,
+    If,
+    Else,
+    Return,
 }
 
 impl std::fmt::Display for TokenType {
@@ -34,12 +49,25 @@ impl std::fmt::Display for TokenType {
             TokenType::Illegal => write!(f, "ILLEGAL"),
             TokenType::Eof => write!(f, "EOF"),
 
+            // Identifiers + literals
             TokenType::Ident => write!(f, "IDENT"),
             TokenType::Int => write!(f, "INT"),
 
+            // Operators
             TokenType::Assign => write!(f, "="),
             TokenType::Plus => write!(f, "+"),
+            TokenType::Minus => write!(f, "-"),
+            TokenType::Bang => write!(f, "!"),
+            TokenType::Asterisk => write!(f, "*"),
+            TokenType::Slash => write!(f, "/"),
 
+            TokenType::LT => write!(f, "<"),
+            TokenType::GT => write!(f, ">"),
+
+            TokenType::Eq => write!(f, "=="),
+            TokenType::NotEq => write!(f, "!="),
+
+            // Delimiters
             TokenType::Comma => write!(f, ","),
             TokenType::Semicolon => write!(f, ";"),
             TokenType::Lparen => write!(f, "("),
@@ -47,8 +75,14 @@ impl std::fmt::Display for TokenType {
             TokenType::Lbrace => write!(f, "{{"),
             TokenType::Rbrace => write!(f, "}}"),
 
+            // Keywords
             TokenType::Function => write!(f, "FUNCTION"),
             TokenType::Let => write!(f, "LET"),
+            TokenType::True => write!(f, "TRUE"),
+            TokenType::False => write!(f, "FALSE"),
+            TokenType::If => write!(f, "IF"),
+            TokenType::Else => write!(f, "ELSE"),
+            TokenType::Return => write!(f, "RETURN"),
         }
     }
 }
@@ -77,6 +111,11 @@ lazy_static! {
         let mut m = HashMap::new();
         m.insert("fn", TokenType::Function);
         m.insert("let", TokenType::Let );
+        m.insert("true", TokenType::True);
+        m.insert("false", TokenType::False);
+        m.insert("if", TokenType::If);
+        m.insert("else", TokenType::Else);
+        m.insert("return", TokenType::Return);
         m
     };
 }
