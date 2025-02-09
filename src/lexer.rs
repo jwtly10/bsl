@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn test_read_identifier() {
         let input = String::from("testing");
-        let mut lexer = Lexer::new(String::from(input.clone()));
+        let mut lexer = Lexer::new(input.clone());
 
         let output = lexer.read_identifier();
 
@@ -212,22 +212,22 @@ mod tests {
 
     #[test]
     fn test_is_letter() {
-        assert_eq!(true, is_letter('a'));
-        assert_eq!(true, is_letter('z'));
-        assert_eq!(true, is_letter('_'));
+        assert!(is_letter('a'));
+        assert!(is_letter('z'));
+        assert!(is_letter('_'));
 
-        assert_eq!(false, is_letter('-'));
-        assert_eq!(false, is_letter('1'));
+        assert!(!is_letter('-'));
+        assert!(!is_letter('1'));
     }
 
     #[test]
     fn test_is_digit() {
-        assert_eq!(true, is_digit('0'));
-        assert_eq!(true, is_digit('1'));
-        assert_eq!(true, is_digit('9'));
+        assert!(is_digit('0'));
+        assert!(is_digit('1'));
+        assert!(is_digit('9'));
 
-        assert_eq!(false, is_digit('d'));
-        assert_eq!(false, is_digit('!'));
+        assert!(!is_digit('d'));
+        assert!(!is_digit('!'));
     }
 
     #[test]
