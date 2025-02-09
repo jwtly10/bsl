@@ -80,41 +80,37 @@ impl Lexer {
     pub fn next_token(&mut self) -> Token {
         match self.ch {
             // Operators
-            Some('=') => {
-                match self.peek_char() {
-                    Some('=') => {
-                        self.read_char();
-                        let tok = Token::new(TokenType::Eq, "==".to_string());
-                        self.read_char();
-                        tok
-                    }
-                    _ => {
-                        let tok = new_token(TokenType::Assign, self.ch.unwrap());
-                        self.read_char();
-                        tok
-                    }
+            Some('=') => match self.peek_char() {
+                Some('=') => {
+                    self.read_char();
+                    let tok = Token::new(TokenType::Eq, "==".to_string());
+                    self.read_char();
+                    tok
                 }
-            }
+                _ => {
+                    let tok = new_token(TokenType::Assign, self.ch.unwrap());
+                    self.read_char();
+                    tok
+                }
+            },
             Some('-') => {
                 let tok = new_token(TokenType::Minus, self.ch.unwrap());
                 self.read_char();
                 tok
             }
-            Some('!') => {
-                match self.peek_char() {
-                    Some('=') => {
-                        self.read_char();
-                        let tok = Token::new(TokenType::NotEq, "!=".to_string());
-                        self.read_char();
-                        tok
-                    }
-                    _ => {
-                        let tok = new_token(TokenType::Bang, self.ch.unwrap());
-                        self.read_char();
-                        tok
-                    }
+            Some('!') => match self.peek_char() {
+                Some('=') => {
+                    self.read_char();
+                    let tok = Token::new(TokenType::NotEq, "!=".to_string());
+                    self.read_char();
+                    tok
                 }
-            }
+                _ => {
+                    let tok = new_token(TokenType::Bang, self.ch.unwrap());
+                    self.read_char();
+                    tok
+                }
+            },
             Some('/') => {
                 let tok = new_token(TokenType::Slash, self.ch.unwrap());
                 self.read_char();
@@ -181,7 +177,7 @@ impl Lexer {
                     let identifier = self.read_identifier();
                     return Token::new(lookup_identifier(identifier.as_str()), identifier);
                 } else if is_digit(ch) {
-                    return Token::new(TokenType::Int, self.read_number())
+                    return Token::new(TokenType::Int, self.read_number());
                 } else {
                     let tok = new_token(TokenType::Illegal, ch);
                     self.read_char();
@@ -193,14 +189,12 @@ impl Lexer {
 }
 
 fn is_letter(ch: char) -> bool {
-    // TODO: Could use is_alphabetic()
-    ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z') || ch == '_'
+    ch.is_alphabetic() || ch == '_'
 }
 
 fn is_digit(ch: char) -> bool {
-    '0' <= ch && ch <= '9'
+    ch.is_ascii_digit()
 }
-
 
 #[cfg(test)]
 mod tests {
