@@ -114,6 +114,7 @@ pub enum Expression {
     IdentifierExpr(Identifier),
     IntegerLiteralExpr(IntegerLiteral),
     PrefixExpr(PrefixExpression),
+    InfixExpr(InfixExpression),
     Null,
 }
 
@@ -123,6 +124,7 @@ impl fmt::Display for Expression {
             Expression::IdentifierExpr(i) => write!(f, "{}", i.value),
             Expression::IntegerLiteralExpr(il) => write!(f, "{}", il.value),
             Expression::PrefixExpr(pe) => write!(f, "{}", pe.string()),
+            Expression::InfixExpr(ie) => write!(f, "{}", ie.string()),
             Expression::Null => write!(f, "null"),
         }
     }
@@ -134,6 +136,7 @@ impl Expression {
             Expression::IdentifierExpr(i) => i.token_literal(),
             Expression::IntegerLiteralExpr(il) => il.token_literal(),
             Expression::PrefixExpr(pe) => pe.token_literal(),
+            Expression::InfixExpr(ie) => ie.token_literal(),
             Expression::Null => "".to_string(),
         }
     }
@@ -167,6 +170,23 @@ impl PrefixExpression {
     }
     pub fn string(&self) -> String {
         format!("({}{})", self.operator, self.right)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InfixExpression {
+    pub token: Token, // The infix token, e.g. +
+    pub left: Box<Expression>, // The left expression
+    pub operator: String, // The operator, e.g. +
+    pub right: Box<Expression>, // The right expression
+}
+
+impl InfixExpression {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    pub fn string(&self) -> String {
+        format!("({} {} {})", self.left, self.operator, self.right)
     }
 }
 
