@@ -1,4 +1,3 @@
-/**/
 use crate::token::Token;
 use std::fmt;
 
@@ -31,7 +30,7 @@ impl Statement {
         match self {
             Statement::Let(ls) => ls.token_literal(),
             Statement::Return(rs) => rs.token_literal(),
-            Statement::Expression(es) => es.token_literal()
+            Statement::Expression(es) => es.token_literal(),
         }
     }
 
@@ -39,7 +38,7 @@ impl Statement {
         match self {
             Statement::Let(ls) => ls.string(),
             Statement::Return(rs) => rs.string(),
-            Statement::Expression(es) => es.string()
+            Statement::Expression(es) => es.string(),
         }
     }
 }
@@ -56,7 +55,12 @@ impl LetStatement {
         self.token.literal.clone()
     }
     pub fn string(&self) -> String {
-        format!("{} {} = {};", self.token_literal(), self.name.value, self.value)
+        format!(
+            "{} {} = {};",
+            self.token_literal(),
+            self.name.value,
+            self.value
+        )
     }
 }
 
@@ -65,7 +69,6 @@ pub struct ReturnStatement {
     pub token: Token, // token.Return
     pub return_value: Expression,
 }
-
 
 impl ReturnStatement {
     pub fn token_literal(&self) -> String {
@@ -82,7 +85,6 @@ pub struct ExpressionStatement {
     pub expression: Expression,
 }
 
-
 impl ExpressionStatement {
     pub fn token_literal(&self) -> String {
         self.token.literal.clone()
@@ -91,7 +93,6 @@ impl ExpressionStatement {
         format!("{}", self.expression)
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Identifier {
@@ -111,12 +112,18 @@ impl Identifier {
 #[derive(Debug, Clone)]
 pub enum Expression {
     IdentifierExpr(Identifier),
+    IntegerLiteralExpr(IntegerLiteral),
+    PrefixExpr(PrefixExpression),
+    Null,
 }
 
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Expression::IdentifierExpr(i) => write!(f, "{}", i.value),
+            Expression::IntegerLiteralExpr(il) => write!(f, "{}", il.value),
+            Expression::PrefixExpr(pe) => write!(f, "{}", pe.string()),
+            Expression::Null => write!(f, "null"),
         }
     }
 }
@@ -125,7 +132,41 @@ impl Expression {
     pub fn token_literal(&self) -> String {
         match self {
             Expression::IdentifierExpr(i) => i.token_literal(),
+            Expression::IntegerLiteralExpr(il) => il.token_literal(),
+            Expression::PrefixExpr(pe) => pe.token_literal(),
+            Expression::Null => "".to_string(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IntegerLiteral {
+    pub token: Token,
+    pub value: i64,
+}
+
+impl IntegerLiteral {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    pub fn string(&self) -> String {
+        self.token.literal.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PrefixExpression {
+    pub token: Token, // The prefix token, e.g. !
+    pub operator: String, // The operator, e.g. !
+    pub right: Box<Expression>, // The right expression
+}
+
+impl PrefixExpression {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    pub fn string(&self) -> String {
+        format!("({}{})", self.operator, self.right)
     }
 }
 
@@ -135,28 +176,26 @@ mod tests {
 
     #[test]
     fn test_string() {
-        let program = Program::new(vec![
-            Statement::Let(LetStatement {
+        let program = Program::new(vec![Statement::Let(LetStatement {
+            token: Token {
+                token_type: crate::token::TokenType::Let,
+                literal: "let".to_string(),
+            },
+            name: Identifier {
                 token: Token {
-                    token_type: crate::token::TokenType::Let,
-                    literal: "let".to_string(),
+                    token_type: crate::token::TokenType::Ident,
+                    literal: "myVar".to_string(),
                 },
-                name: Identifier {
-                    token: Token {
-                        token_type: crate::token::TokenType::Ident,
-                        literal: "myVar".to_string(),
-                    },
-                    value: "myVar".to_string(),
+                value: "myVar".to_string(),
+            },
+            value: Expression::IdentifierExpr(Identifier {
+                token: Token {
+                    token_type: crate::token::TokenType::Ident,
+                    literal: "anotherVar".to_string(),
                 },
-                value: Expression::IdentifierExpr(Identifier {
-                    token: Token {
-                        token_type: crate::token::TokenType::Ident,
-                        literal: "anotherVar".to_string(),
-                    },
-                    value: "anotherVar".to_string(),
-                }),
+                value: "anotherVar".to_string(),
             }),
-        ]);
+        })]);
 
         let expected = "let myVar = anotherVar;";
         if program.string() != expected {
@@ -164,4 +203,3 @@ mod tests {
         }
     }
 }
-
