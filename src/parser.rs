@@ -1,4 +1,4 @@
-use crate::ast::{Expression, Identifier, LetStatement, Program, Statement};
+use crate::ast::{Expression, Identifier, LetStatement, Program, ReturnStatement, Statement};
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 use std::fmt;
@@ -73,6 +73,7 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<Statement> {
         match self.cur_token.token_type {
             TokenType::Let => self.parse_let_statement(),
+            TokenType::Return => self.parse_return_statement(),
             _ => {
                 None
             }
@@ -112,6 +113,26 @@ impl Parser {
         }))
     }
 
+    fn parse_return_statement(&mut self) -> Option<Statement> {
+        let let_token = self.cur_token.clone();
+
+        self.next_token();
+
+        // TODO: Parse the expression
+        // For now, skip until the semicolon
+        while !self.cur_token_is(&TokenType::Semicolon) {
+            self.next_token();
+        }
+
+        Some(Statement::Return(ReturnStatement {
+            token: let_token,
+            return_value: Expression::IdentifierExpr(Identifier {
+                token: Token::new(TokenType::Ident, "dummy".to_string()),
+                value: "dummy".to_string(),
+            }), // Placeholder
+        }))
+    }
+
     fn cur_token_is(&self, t: &TokenType) -> bool {
         &self.cur_token.token_type == t
     }
@@ -121,11 +142,11 @@ impl Parser {
     }
 
     fn expect_peek(&mut self, t: &TokenType) -> bool {
-        if self.peek_token_is(&t) {
+        if self.peek_token_is(t) {
             self.next_token();
             true
         } else {
-            self.peek_error(&t);
+            self.peek_error(t);
             false
         }
     }
@@ -139,19 +160,6 @@ impl Parser {
             expected: t.clone(),
             actual: self.peek_token.token_type.clone(),
         });
-    }
-
-    fn consume_current(&mut self, t: TokenType) -> Result<Token, ParseError> {
-        if !self.cur_token_is(&t) {
-            return Err(ParseError::UnexpectedToken {
-                expected: t,
-                actual: self.cur_token.token_type.clone(),
-            });
-        }
-
-        let token = std::mem::replace(&mut self.cur_token, self.peek_token.clone());
-        self.next_token();
-        Ok(token)
     }
 }
 
@@ -248,6 +256,41 @@ mod tests {
             }
         }
     }
+
+
+    #[test]
+    fn test_return_statements() {
+        let input = "\n\
+             return 5;\n\
+             return 10;\n\
+             return 993322;\n\
+             ";
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer).unwrap();
+
+
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
+
+        if program.statements.len() != 3 {
+            panic!("program.statements does not contain 3 statements. got='{:?}'", program.statements.len());
+        }
+
+        program.statements.iter().for_each(
+            |stmt| {
+                match stmt {
+                    Statement::Return(return_stmt) => {
+                        if return_stmt.token_literal() != "return" {
+                            panic!("return_stmt.token_literal() not 'return'. got='{}'", return_stmt.token_literal());
+                        }
+                    }
+                    _ => panic!("stmt not ReturnStatement. got='{:?}'", stmt)
+                }
+            }
+        )
+    }
+
 
     fn check_parser_errors(p: &Parser) {
         if !p.errors.is_empty() {
