@@ -235,9 +235,9 @@ impl Parser {
             token: let_token,
             name,
             value: Expression::IdentifierExpr(Identifier {
-                token: Token::new(TokenType::Ident, "dummy".to_string()),
-                value: "dummy".to_string(),
-            }), // Placeholder
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            }),
         }))
     }
 
@@ -255,9 +255,9 @@ impl Parser {
         Some(Statement::Return(ReturnStatement {
             token: let_token,
             return_value: Expression::IdentifierExpr(Identifier {
-                token: Token::new(TokenType::Ident, "dummy".to_string()),
-                value: "dummy".to_string(),
-            }), // Placeholder
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            }),
         }))
     }
 
