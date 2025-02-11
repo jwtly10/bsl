@@ -3,3 +3,4 @@ pub mod lexer;
 mod parser;
 pub mod repl;
 pub mod token;
+mod trace;

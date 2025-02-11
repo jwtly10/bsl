@@ -1,7 +1,11 @@
 use crate::ast::Expression::Null;
-use crate::ast::{Expression, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement};
+use crate::ast::{
+    Expression, ExpressionStatement, Identifier, InfixExpression, IntegerLiteral, LetStatement,
+    PrefixExpression, Program, ReturnStatement, Statement,
+};
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
+use crate::trace::TraceGuard;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fmt;
@@ -20,8 +24,6 @@ lazy_static! {
         m
     };
 }
-
-
 
 type PrefixParseFn = fn(&mut Parser) -> Result<Expression, ParseError>;
 type InfixParseFn = fn(&mut Parser, Expression) -> Result<Expression, ParseError>;
@@ -66,7 +68,11 @@ impl fmt::Display for ParseError {
                 )
             }
             ParseError::PrefixParseFnNotFound { token_type } => {
-                write!(f, "no prefix parse found function for {:?}", token_type.to_string())
+                write!(
+                    f,
+                    "no prefix parse found function for {:?}",
+                    token_type.to_string()
+                )
             }
             ParseError::IntegerConv { value } => {
                 write!(f, "could not parse '{}' as integer", value)
@@ -152,6 +158,7 @@ impl Parser {
     }
 
     fn parse_expression(&mut self, precedence: Precedence) -> Result<Expression, ParseError> {
+        let _trace = TraceGuard::new("parse_expression");
         let mut left = match self.prefix_parse_fns.get(&self.cur_token.token_type) {
             Some(prefix_fn) => prefix_fn(self)?,
             None => {
@@ -164,7 +171,9 @@ impl Parser {
         };
 
         while !self.peek_token_is(&TokenType::Semicolon) && precedence < self.peek_precedence() {
-            let has_infix = self.infix_parse_fns.contains_key(&self.peek_token.token_type);
+            let has_infix = self
+                .infix_parse_fns
+                .contains_key(&self.peek_token.token_type);
             if !has_infix {
                 break;
             }
@@ -240,6 +249,7 @@ impl Parser {
     }
 
     fn parse_expression_statement(&mut self) -> Option<Statement> {
+        let _trace = TraceGuard::new("parse_expression_statement");
         let stmt = Statement::Expression(ExpressionStatement {
             token: self.cur_token.clone(),
             expression: match self.parse_expression(Precedence::Lowest) {
@@ -260,17 +270,16 @@ impl Parser {
     }
 
     fn parse_integer_literal(&mut self) -> Result<Expression, ParseError> {
+        let _trace = TraceGuard::new("parse_integration_literal");
         let cur_token_lit = self.cur_token.literal.clone();
         match cur_token_lit.parse::<i64>() {
             Ok(value) => Ok(Expression::IntegerLiteralExpr(IntegerLiteral {
                 token: self.cur_token.clone(),
                 value,
             })),
-            Err(_) => {
-                Err(ParseError::IntegerConv {
-                    value: cur_token_lit,
-                })
-            }
+            Err(_) => Err(ParseError::IntegerConv {
+                value: cur_token_lit,
+            }),
         }
     }
 
@@ -281,6 +290,7 @@ impl Parser {
     }
 
     fn parse_prefix_expression(&mut self) -> Result<Expression, ParseError> {
+        let _trace = TraceGuard::new("parse_prefix_expression");
         let token = self.cur_token.clone();
         let operator = self.cur_token.literal.clone();
 
@@ -296,6 +306,7 @@ impl Parser {
     }
 
     fn parse_infix_expression(&mut self, left: Expression) -> Result<Expression, ParseError> {
+        let _trace = TraceGuard::new("parse_infix_expression");
         let token = self.cur_token.clone();
         let operator = self.cur_token.literal.clone();
         let precedence = self.cur_precedence();
@@ -355,7 +366,11 @@ impl Parser {
         }
     }
 
-    fn register_prefix(&mut self, t: TokenType, f: fn(&mut Parser) -> Result<Expression, ParseError>) {
+    fn register_prefix(
+        &mut self,
+        t: TokenType,
+        f: fn(&mut Parser) -> Result<Expression, ParseError>,
+    ) {
         self.prefix_parse_fns.insert(t, f);
     }
 
@@ -509,7 +524,10 @@ mod tests {
         check_parser_errors(&parser);
 
         if program.statements.len() != 1 {
-            panic!("program.statements does not contain 1 statement. got='{:?}'", program.statements.len());
+            panic!(
+                "program.statements does not contain 1 statement. got='{:?}'",
+                program.statements.len()
+            );
         }
 
         let stmt = &program.statements[0];
@@ -526,16 +544,16 @@ mod tests {
             panic!("literal.value not 5. got='{}'", literal.value);
         }
         if literal.token_literal() != "5" {
-            panic!("literal.token_literal() not '5'. got='{}'", literal.token_literal());
+            panic!(
+                "literal.token_literal() not '5'. got='{}'",
+                literal.token_literal()
+            );
         }
     }
 
     #[test]
     fn test_parsing_prefix_expressions() {
-        let tests = vec![
-            ("!5;", "!", 5),
-            ("-15;", "-", 15),
-        ];
+        let tests = vec![("!5;", "!", 5), ("-15;", "-", 15)];
 
         for (input, operator, value) in tests {
             let lexer = Lexer::new(input.to_string());
@@ -544,7 +562,10 @@ mod tests {
             check_parser_errors(&parser);
 
             if program.statements.len() != 1 {
-                panic!("program.statements does not contain 1 statement. got='{:?}'", program.statements.len());
+                panic!(
+                    "program.statements does not contain 1 statement. got='{:?}'",
+                    program.statements.len()
+                );
             }
 
             let stmt = &program.statements[0];
@@ -559,7 +580,10 @@ mod tests {
             };
 
             if prefix.operator != operator {
-                panic!("prefix.operator is not '{}'. got='{}'", operator, prefix.operator);
+                panic!(
+                    "prefix.operator is not '{}'. got='{}'",
+                    operator, prefix.operator
+                );
             }
 
             if !test_integer_literal(&prefix.right, value) {
@@ -581,7 +605,6 @@ mod tests {
             ("5 != 5;", 5, "!=", 5),
         ];
 
-
         for (input, left_value, operator, right_value) in infix_tests {
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer).unwrap();
@@ -589,7 +612,10 @@ mod tests {
             check_parser_errors(&parser);
 
             if program.statements.len() != 1 {
-                panic!("program.statements does not contain 1 statement. got='{:?}'", program.statements.len());
+                panic!(
+                    "program.statements does not contain 1 statement. got='{:?}'",
+                    program.statements.len()
+                );
             }
 
             let stmt = &program.statements[0];
@@ -608,7 +634,10 @@ mod tests {
             }
 
             if infix.operator != operator {
-                panic!("infix.operator is not '{}'. got='{}'", operator, infix.operator);
+                panic!(
+                    "infix.operator is not '{}'. got='{}'",
+                    operator, infix.operator
+                );
             }
 
             if !test_integer_literal(&infix.right, right_value) {
@@ -621,11 +650,18 @@ mod tests {
         match expr {
             Expression::IntegerLiteralExpr(lit) => {
                 if lit.value != value {
-                    eprintln!("IntegerLiteralExpr has value '{}' expected '{}'", lit.value, value);
+                    eprintln!(
+                        "IntegerLiteralExpr has value '{}' expected '{}'",
+                        lit.value, value
+                    );
                     return false;
                 }
                 if lit.token_literal() != value.to_string() {
-                    eprintln!("IntegerLiteralExpr has token_literal '{}' expected '{}'", lit.token_literal(), value);
+                    eprintln!(
+                        "IntegerLiteralExpr has token_literal '{}' expected '{}'",
+                        lit.token_literal(),
+                        value
+                    );
                     return false;
                 }
                 true
@@ -651,7 +687,10 @@ mod tests {
             ("3 + 4; -5 * 5", "(3 + 4)((-5) * 5)"),
             ("5 > 4 == 3 < 4", "((5 > 4) == (3 < 4))"),
             ("5 < 4 != 3 > 4", "((5 < 4) != (3 > 4))"),
-            ("3 + 4 * 5 == 3 * 1 + 4 * 5", "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))"),
+            (
+                "3 + 4 * 5 == 3 * 1 + 4 * 5",
+                "((3 + (4 * 5)) == ((3 * 1) + (4 * 5)))",
+            ),
         ];
 
         let mut errs = 0;
@@ -672,7 +711,6 @@ mod tests {
             panic!("Test failed. we have errors")
         }
     }
-
 
     fn check_parser_errors(p: &Parser) {
         if !p.errors.is_empty() {
