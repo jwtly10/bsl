@@ -1,6 +1,6 @@
-mod ast;
+pub mod ast;
 pub mod lexer;
-mod parser;
+pub mod parser;
 pub mod repl;
 pub mod token;
-mod trace;
+pub mod trace;

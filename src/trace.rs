@@ -23,7 +23,7 @@ impl TraceGuard {
     pub fn new(msg: &str) -> Self {
         TRACE_LEVEL.with(|level| {
             *level.borrow_mut() += 1;
-            println!("{}BEGIN {}", ident_level(), msg);
+            // println!("{}BEGIN {}", ident_level(), msg);
         });
         Self {
             msg: msg.to_string(),
@@ -34,7 +34,7 @@ impl TraceGuard {
 impl Drop for TraceGuard {
     fn drop(&mut self) {
         TRACE_LEVEL.with(|level| {
-            println!("{}END {}", ident_level(), self.msg);
+            // println!("{}END {}", ident_level(), self.msg);
             *level.borrow_mut() -= 1;
         });
     }
