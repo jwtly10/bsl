@@ -1,8 +1,8 @@
 use crate::ast::Expression::Null;
 use crate::ast::{
-    BlockStatement, BooleanLiteral, Expression, ExpressionStatement, FunctionLiteral, Identifier,
-    IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
-    ReturnStatement, Statement,
+    BlockStatement, BooleanLiteral, CallExpression, Expression, ExpressionStatement,
+    FunctionLiteral, Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement,
+    PrefixExpression, Program, ReturnStatement, Statement,
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
@@ -22,6 +22,7 @@ lazy_static! {
         m.insert(&TokenType::Minus, Precedence::Sum);
         m.insert(&TokenType::Slash, Precedence::Product);
         m.insert(&TokenType::Asterisk, Precedence::Product);
+        m.insert(&TokenType::Lparen, Precedence::Call);
         m
     };
 }
@@ -124,6 +125,13 @@ impl Parser {
 
         p.register_prefix(TokenType::Function, Parser::parse_function_literal);
 
+        p.register_prefix(TokenType::True, Parser::parse_boolean_literal);
+        p.register_prefix(TokenType::False, Parser::parse_boolean_literal);
+
+        p.register_prefix(TokenType::Lparen, Parser::parse_grouped_expression);
+
+        p.register_prefix(TokenType::If, Parser::parse_if_expression);
+
         p.register_infix(TokenType::Plus, Parser::parse_infix_expression);
         p.register_infix(TokenType::Minus, Parser::parse_infix_expression);
         p.register_infix(TokenType::Slash, Parser::parse_infix_expression);
@@ -133,12 +141,7 @@ impl Parser {
         p.register_infix(TokenType::LT, Parser::parse_infix_expression);
         p.register_infix(TokenType::GT, Parser::parse_infix_expression);
 
-        p.register_prefix(TokenType::True, Parser::parse_boolean_literal);
-        p.register_prefix(TokenType::False, Parser::parse_boolean_literal);
-
-        p.register_prefix(TokenType::Lparen, Parser::parse_grouped_expression);
-
-        p.register_prefix(TokenType::If, Parser::parse_if_expression);
+        p.register_infix(TokenType::Lparen, Parser::parse_call_expression);
 
         Ok(p)
     }
@@ -320,7 +323,7 @@ impl Parser {
 
         let body = self.parse_block_statement()?;
 
-        Ok(Expression::FunctionLiteralExpr(FunctionLiteral {
+        Ok(Expression::FunctionExpr(FunctionLiteral {
             token: self.cur_token.clone(),
             parameters: params,
             body,
@@ -409,6 +412,40 @@ impl Parser {
         }
 
         Ok(exp)
+    }
+
+    fn parse_call_expression(&mut self, function: Expression) -> Result<Expression, ParseError> {
+        let token = self.cur_token.clone();
+        let arguments = self.parse_call_arguments();
+        Ok(Expression::CallExpr(CallExpression {
+            token,
+            function: Box::new(function),
+            arguments,
+        }))
+    }
+
+    fn parse_call_arguments(&mut self) -> Vec<Expression> {
+        let mut args = Vec::new();
+
+        if self.peek_token_is(&TokenType::Rparen) {
+            self.next_token();
+            return args;
+        }
+
+        self.next_token();
+        args.push(self.parse_expression(Precedence::Lowest).unwrap());
+
+        while self.peek_token_is(&TokenType::Comma) {
+            self.next_token();
+            self.next_token();
+            args.push(self.parse_expression(Precedence::Lowest).unwrap());
+        }
+
+        if !self.expect_peek(&TokenType::Rparen) {
+            return Vec::new();
+        }
+
+        args
     }
 
     fn parse_if_expression(&mut self) -> Result<Expression, ParseError> {
@@ -641,6 +678,15 @@ mod tests {
     #[test]
     fn test_operator_precedence_parsing() {
         let tests = vec![
+            ("a + add(b * c) + d", "((a + add((b * c))) + d)"),
+            (
+                "add(a, b, 1, 2 * 3, 4 + 5, add(6, 7 * 8))",
+                "add(a, b, 1, (2 * 3), (4 + 5), add(6, (7 * 8)))",
+            ),
+            (
+                "add(a + b + c * d / f + g)",
+                "add((((a + b) + ((c * d) / f)) + g))",
+            ),
             ("1 + (2 + 3) + 4", "((1 + (2 + 3)) + 4)"),
             ("(5 + 5) * 2", "((5 + 5) * 2)"),
             ("2 / (5 + 5)", "(2 / (5 + 5))"),
@@ -1006,7 +1052,7 @@ mod tests {
         };
 
         let func = match &expr.expression {
-            Expression::FunctionLiteralExpr(func) => func,
+            Expression::FunctionExpr(func) => func,
             _ => panic!("expr not FunctionLiteral. got='{:?}'", expr.expression),
         };
 
@@ -1061,7 +1107,7 @@ mod tests {
             };
 
             let func = match &expr.expression {
-                Expression::FunctionLiteralExpr(func) => func,
+                Expression::FunctionExpr(func) => func,
                 _ => panic!("expr not FunctionLiteral. got='{:?}'", expr.expression),
             };
 
@@ -1081,6 +1127,50 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_call_expression_parsing() {
+        let input = "add(1, 2 * 3, 4 + 5);";
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer).unwrap();
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
+
+        if program.statements.len() != 1 {
+            panic!(
+                "program.statements does not contain 1 statement. got='{:?}'",
+                program.statements.len()
+            );
+        }
+
+        let stmt = &program.statements[0];
+        let expr = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt not ExpressionStatement. got='{:?}'", stmt),
+        };
+
+        let call_expr = match &expr.expression {
+            Expression::CallExpr(call_expr) => call_expr,
+            _ => panic!("expr not CallExpression. got='{:?}'", expr.expression),
+        };
+
+        if call_expr.arguments.len() != 3 {
+            panic!(
+                "call_expr.arguments has not 3 arguments. got='{:?}'",
+                call_expr.arguments.len()
+            );
+        }
+
+        let arg1 = &call_expr.arguments[0];
+        test_literal_expression(arg1, &ExpectedValue::Int(1));
+
+        let arg2 = &call_expr.arguments[1];
+        test_infix_expression(arg2, &ExpectedValue::Int(2), "*", &ExpectedValue::Int(3));
+
+        let arg3 = &call_expr.arguments[2];
+        test_infix_expression(arg3, &ExpectedValue::Int(4), "+", &ExpectedValue::Int(5));
     }
 
     // **************************************************** //
