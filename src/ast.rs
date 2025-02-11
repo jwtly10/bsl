@@ -139,6 +139,8 @@ pub enum Expression {
     IdentifierExpr(Identifier),
     IntegerLiteralExpr(IntegerLiteral),
     BooleanLiteralExpr(BooleanLiteral),
+    FunctionLiteralExpr(FunctionLiteral),
+
     IfExpr(IfExpression),
     PrefixExpr(PrefixExpression),
     InfixExpr(InfixExpression),
@@ -151,6 +153,8 @@ impl fmt::Display for Expression {
             Expression::IdentifierExpr(i) => write!(f, "{}", i.value),
             Expression::IntegerLiteralExpr(il) => write!(f, "{}", il.value),
             Expression::BooleanLiteralExpr(b) => write!(f, "{}", b.value),
+            Expression::FunctionLiteralExpr(fl) => write!(f, "{}", fl.token.literal),
+
             Expression::IfExpr(ie) => write!(f, "{}", ie.string()),
             Expression::PrefixExpr(pe) => write!(f, "{}", pe.string()),
             Expression::InfixExpr(ie) => write!(f, "{}", ie.string()),
@@ -165,11 +169,41 @@ impl Expression {
             Expression::IdentifierExpr(i) => i.token_literal(),
             Expression::IntegerLiteralExpr(il) => il.token_literal(),
             Expression::BooleanLiteralExpr(b) => b.token.literal.clone(),
+            Expression::FunctionLiteralExpr(fl) => fl.token.literal.clone(),
+
             Expression::IfExpr(ie) => ie.token_literal(),
             Expression::PrefixExpr(pe) => pe.token_literal(),
             Expression::InfixExpr(ie) => ie.token_literal(),
             Expression::Null => "".to_string(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionLiteral {
+    pub token: Token,
+    pub parameters: Vec<Identifier>,
+    pub body: BlockStatement,
+}
+
+impl FunctionLiteral {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    pub fn string(&self) -> String {
+        let mut out = String::new();
+        let mut params = Vec::new();
+        for p in &self.parameters {
+            params.push(p.value.clone());
+        }
+        out.push_str(&format!(
+            "{}({}) {}",
+            self.token_literal(),
+            params.join(", "),
+            self.body.string()
+        ));
+        out
     }
 }
 

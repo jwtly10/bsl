@@ -1,8 +1,8 @@
 use crate::ast::Expression::Null;
 use crate::ast::{
-    BlockStatement, BooleanLiteral, Expression, ExpressionStatement, Identifier, IfExpression,
-    InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement,
-    Statement,
+    BlockStatement, BooleanLiteral, Expression, ExpressionStatement, FunctionLiteral, Identifier,
+    IfExpression, InfixExpression, IntegerLiteral, LetStatement, PrefixExpression, Program,
+    ReturnStatement, Statement,
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
@@ -121,6 +121,8 @@ impl Parser {
 
         p.register_prefix(TokenType::Bang, Parser::parse_prefix_expression);
         p.register_prefix(TokenType::Minus, Parser::parse_prefix_expression);
+
+        p.register_prefix(TokenType::Function, Parser::parse_function_literal);
 
         p.register_infix(TokenType::Plus, Parser::parse_infix_expression);
         p.register_infix(TokenType::Minus, Parser::parse_infix_expression);
@@ -303,6 +305,58 @@ impl Parser {
                 value: cur_token_lit,
             }),
         }
+    }
+
+    fn parse_function_literal(&mut self) -> Result<Expression, ParseError> {
+        if !self.expect_peek(&TokenType::Lparen) {
+            return Ok(Expression::Null);
+        }
+
+        let params = self.parse_function_parameters();
+
+        if !self.expect_peek(&TokenType::Lbrace) {
+            return Ok(Expression::Null);
+        }
+
+        let body = self.parse_block_statement()?;
+
+        Ok(Expression::FunctionLiteralExpr(FunctionLiteral {
+            token: self.cur_token.clone(),
+            parameters: params,
+            body,
+        }))
+    }
+
+    fn parse_function_parameters(&mut self) -> Vec<Identifier> {
+        if self.peek_token_is(&TokenType::Rparen) {
+            self.next_token();
+            return Vec::new();
+        }
+
+        self.next_token();
+
+        let ident = Identifier {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        };
+
+        let mut identifiers = vec![ident];
+
+        while self.peek_token_is(&TokenType::Comma) {
+            self.next_token();
+            self.next_token();
+            let ident = Identifier {
+                token: self.cur_token.clone(),
+                value: self.cur_token.literal.clone(),
+            };
+            identifiers.push(ident);
+        }
+
+        if !self.expect_peek(&TokenType::Rparen) {
+            return Vec::new();
+        }
+
+        identifiers
     }
 
     fn no_prefix_parse_fn_error(&mut self, t: &TokenType) {
@@ -926,6 +980,106 @@ mod tests {
 
         if !test_identifier(&alt_expr.expression, "y".to_string()) {
             panic!("test_identifier failed for alternative");
+        }
+    }
+
+    #[test]
+    fn test_parsing_function_literal() {
+        let input = "fn(x, y) { x + y;}";
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer).unwrap();
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
+
+        if program.statements.len() != 1 {
+            panic!(
+                "program.statements does not contain 1 statement. got='{:?}'",
+                program.statements.len()
+            );
+        }
+
+        let stmt = &program.statements[0];
+        let expr = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt not ExpressionStatement. got='{:?}'", stmt),
+        };
+
+        let func = match &expr.expression {
+            Expression::FunctionLiteralExpr(func) => func,
+            _ => panic!("expr not FunctionLiteral. got='{:?}'", expr.expression),
+        };
+
+        test_literal_expression(
+            &Expression::IdentifierExpr(func.parameters[0].clone()),
+            &ExpectedValue::Identifier("x".to_string()),
+        );
+        test_literal_expression(
+            &Expression::IdentifierExpr(func.parameters[1].clone()),
+            &ExpectedValue::Identifier("y".to_string()),
+        );
+
+        if func.body.statements.len() != 1 {
+            panic!(
+                "func.body.statements has not 1 statement. got='{:?}'",
+                func.body.statements.len()
+            );
+        }
+
+        let body_stmt = &func.body.statements[0];
+        let body_expr = match body_stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt not ExpressionStatement. got='{:?}'", body_stmt),
+        };
+
+        test_infix_expression(
+            &body_expr.expression,
+            &ExpectedValue::Identifier("x".to_string()),
+            "+",
+            &ExpectedValue::Identifier("y".to_string()),
+        );
+    }
+
+    #[test]
+    fn test_function_parameter_parsing() {
+        let tests = vec![
+            ("fn() {};", vec![]),
+            ("fn(x) {};", vec!["x"]),
+            ("fn(x, y, z) {};", vec!["x", "y", "z"]),
+        ];
+
+        for (input, expected_params) in tests {
+            let lexer = Lexer::new(input.to_string());
+            let mut parser = Parser::new(lexer).unwrap();
+            let program = parser.parse_program();
+            check_parser_errors(&parser);
+
+            let stmt = &program.statements[0];
+            let expr = match stmt {
+                Statement::Expression(expr_stmt) => expr_stmt,
+                _ => panic!("stmt not ExpressionStatement. got='{:?}'", stmt),
+            };
+
+            let func = match &expr.expression {
+                Expression::FunctionLiteralExpr(func) => func,
+                _ => panic!("expr not FunctionLiteral. got='{:?}'", expr.expression),
+            };
+
+            if func.parameters.len() != expected_params.len() {
+                panic!(
+                    "length parameters wrong. want {:?}, got {:?} for input {:?}",
+                    expected_params.len(),
+                    func.parameters.len(),
+                    input
+                );
+            }
+
+            for (i, ident) in expected_params.iter().enumerate() {
+                test_literal_expression(
+                    &Expression::IdentifierExpr(func.parameters[i].clone()),
+                    &ExpectedValue::Identifier(ident.to_string()),
+                );
+            }
         }
     }
 
