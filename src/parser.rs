@@ -225,40 +225,48 @@ impl Parser {
             return None;
         }
 
-        // TODO: Parse the expression
-        // For now, skip until the semicolon
-        while !self.cur_token_is(&TokenType::Semicolon) {
+        self.next_token();
+
+        let val = self.parse_expression(Precedence::Lowest);
+
+        if self.peek_token_is(&TokenType::Semicolon) {
             self.next_token();
         }
 
-        Some(Statement::Let(LetStatement {
-            token: let_token,
-            name,
-            value: Expression::IdentifierExpr(Identifier {
-                token: self.cur_token.clone(),
-                value: self.cur_token.literal.clone(),
-            }),
-        }))
+        match val {
+            Ok(expr) => Some(Statement::Let(LetStatement {
+                token: let_token,
+                name,
+                value: expr,
+            })),
+            Err(err) => {
+                self.errors.push(err);
+                None
+            }
+        }
     }
 
     fn parse_return_statement(&mut self) -> Option<Statement> {
-        let let_token = self.cur_token.clone();
+        let cur_token = self.cur_token.clone();
 
         self.next_token();
 
-        // TODO: Parse the expression
-        // For now, skip until the semicolon
-        while !self.cur_token_is(&TokenType::Semicolon) {
+        let stmt = self.parse_expression(Precedence::Lowest);
+
+        if self.peek_token_is(&TokenType::Semicolon) {
             self.next_token();
         }
 
-        Some(Statement::Return(ReturnStatement {
-            token: let_token,
-            return_value: Expression::IdentifierExpr(Identifier {
-                token: self.cur_token.clone(),
-                value: self.cur_token.literal.clone(),
-            }),
-        }))
+        match stmt {
+            Ok(expr) => Some(Statement::Return(ReturnStatement {
+                token: cur_token,
+                return_value: expr,
+            })),
+            Err(err) => {
+                self.errors.push(err);
+                None
+            }
+        }
     }
 
     fn parse_expression_statement(&mut self) -> Option<Statement> {
@@ -579,68 +587,70 @@ mod tests {
 
     #[test]
     fn test_let_statements() {
-        let input = "\n\
-             let x = 5;\n\
-             let y = 10;\n\
-             let foobar = 838383;\n\
-             ";
+        let tests = vec![
+            ("let x = 5;", "x", ExpectedValue::Int(5)),
+            ("let y = true;", "y", ExpectedValue::Boolean(true)),
+            (
+                "let foobar = y;",
+                "foobar",
+                ExpectedValue::Identifier("y".to_string()),
+            ),
+        ];
 
-        let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer).unwrap();
+        for (input, expected_ident, expected_value) in tests {
+            let lexer = Lexer::new(input.to_string());
+            let mut parser = Parser::new(lexer).unwrap();
+            let program = parser.parse_program();
+            check_parser_errors(&parser);
 
-        let program = parser.parse_program();
+            if program.statements.len() != 1 {
+                panic!(
+                    "program.statements does not contain 1 statement. got='{:?}'",
+                    program.statements.len()
+                );
+            }
 
-        check_parser_errors(&parser);
-
-        if program.statements.len() != 3 {
-            panic!(
-                "program.statements does not contain 3 statements. got='{:?}'",
-                program.statements.len()
-            );
-        }
-
-        let tests = ["x", "y", "foobar"];
-
-        for (i, tt) in tests.iter().enumerate() {
-            let stmt = &program.statements[i];
-            if !test_let_statement(stmt, tt) {
-                panic!("test_let_statement failed for statement '{}'", i)
+            let stmt = &program.statements[0];
+            if !test_let_statement(stmt, expected_ident) {
+                panic!("test_let_statement failed for statement");
             }
         }
     }
 
     #[test]
     fn test_return_statements() {
-        let input = "\n\
-             return 5;\n\
-             return 10;\n\
-             return 993322;\n\
-             ";
+        let tests = vec![
+            ("return 5;", ExpectedValue::Int(5)),
+            ("return true;", ExpectedValue::Boolean(true)),
+            (
+                "return foobar;",
+                ExpectedValue::Identifier("foobar".to_string()),
+            ),
+        ];
 
-        let lexer = Lexer::new(input.to_string());
-        let mut parser = Parser::new(lexer).unwrap();
+        for (input, expected_value) in tests {
+            let lexer = Lexer::new(input.to_string());
+            let mut parser = Parser::new(lexer).unwrap();
+            let program = parser.parse_program();
+            check_parser_errors(&parser);
 
-        let program = parser.parse_program();
-        check_parser_errors(&parser);
-
-        if program.statements.len() != 3 {
-            panic!(
-                "program.statements does not contain 3 statements. got='{:?}'",
-                program.statements.len()
-            );
-        }
-
-        program.statements.iter().for_each(|stmt| match stmt {
-            Statement::Return(return_stmt) => {
-                if return_stmt.token_literal() != "return" {
-                    panic!(
-                        "return_stmt.token_literal() not 'return'. got='{}'",
-                        return_stmt.token_literal()
-                    );
-                }
+            if program.statements.len() != 1 {
+                panic!(
+                    "program.statements does not contain 1 statement. got='{:?}'",
+                    program.statements.len()
+                );
             }
-            _ => panic!("stmt not ReturnStatement. got='{:?}'", stmt),
-        })
+
+            let stmt = &program.statements[0];
+            match (stmt) {
+                Statement::Return(ret) => {
+                    if !test_literal_expression(&ret.return_value, &expected_value) {
+                        panic!("test_literal_expression failed for return_value");
+                    }
+                }
+                _ => panic!("stmt not ReturnStatement. got='{:?}'", stmt),
+            };
+        }
     }
 
     #[test]
