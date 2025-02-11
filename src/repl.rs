@@ -1,3 +1,4 @@
+use crate::evaluator::eval;
 use crate::lexer::Lexer;
 use crate::parser::{ParseError, Parser};
 use std::io;
@@ -34,7 +35,11 @@ fn process_line(line: &str, out_stream: &mut dyn Write) -> io::Result<()> {
         return Ok(());
     }
 
-    writeln!(out_stream, "{}", program.string()).expect("Failed to write program to output");
+    match eval(&program) {
+        Ok(obj) => writeln!(out_stream, "{}", obj.inspect())?,
+        Err(e) => writeln!(out_stream, "Evaluation error: {:?}", e)?,
+    }
+
     Ok(())
 }
 
