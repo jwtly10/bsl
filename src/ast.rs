@@ -22,7 +22,9 @@ impl Program {
 pub enum Statement {
     Let(LetStatement),
     Return(ReturnStatement),
+    Block(BlockStatement),
     Expression(ExpressionStatement),
+    Null,
 }
 
 impl Statement {
@@ -30,7 +32,9 @@ impl Statement {
         match self {
             Statement::Let(ls) => ls.token_literal(),
             Statement::Return(rs) => rs.token_literal(),
+            Statement::Block(b) => b.token_literal(),
             Statement::Expression(es) => es.token_literal(),
+            Statement::Null => "".to_string(),
         }
     }
 
@@ -38,8 +42,29 @@ impl Statement {
         match self {
             Statement::Let(ls) => ls.string(),
             Statement::Return(rs) => rs.string(),
+            Statement::Block(bs) => bs.string(),
             Statement::Expression(es) => es.string(),
+            Statement::Null => "".to_string(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BlockStatement {
+    pub token: Token,
+    pub statements: Vec<Statement>,
+}
+
+impl BlockStatement {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    pub fn string(&self) -> String {
+        let mut out = String::new();
+        for s in &self.statements {
+            out.push_str(&s.string());
+        }
+        out
     }
 }
 
@@ -113,6 +138,8 @@ impl Identifier {
 pub enum Expression {
     IdentifierExpr(Identifier),
     IntegerLiteralExpr(IntegerLiteral),
+    BooleanLiteralExpr(BooleanLiteral),
+    IfExpr(IfExpression),
     PrefixExpr(PrefixExpression),
     InfixExpr(InfixExpression),
     Null,
@@ -123,6 +150,8 @@ impl fmt::Display for Expression {
         match self {
             Expression::IdentifierExpr(i) => write!(f, "{}", i.value),
             Expression::IntegerLiteralExpr(il) => write!(f, "{}", il.value),
+            Expression::BooleanLiteralExpr(b) => write!(f, "{}", b.value),
+            Expression::IfExpr(ie) => write!(f, "{}", ie.string()),
             Expression::PrefixExpr(pe) => write!(f, "{}", pe.string()),
             Expression::InfixExpr(ie) => write!(f, "{}", ie.string()),
             Expression::Null => write!(f, "null"),
@@ -135,10 +164,55 @@ impl Expression {
         match self {
             Expression::IdentifierExpr(i) => i.token_literal(),
             Expression::IntegerLiteralExpr(il) => il.token_literal(),
+            Expression::BooleanLiteralExpr(b) => b.token.literal.clone(),
+            Expression::IfExpr(ie) => ie.token_literal(),
             Expression::PrefixExpr(pe) => pe.token_literal(),
             Expression::InfixExpr(ie) => ie.token_literal(),
             Expression::Null => "".to_string(),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IfExpression {
+    pub token: Token,
+    pub condition: Box<Expression>,
+    pub consequence: Option<BlockStatement>,
+    pub alternative: Option<BlockStatement>,
+}
+
+impl IfExpression {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    pub fn string(&self) -> String {
+        let mut out = String::new();
+        let consequence = match &self.consequence {
+            Some(c) => c.string(),
+            None => "".to_string(),
+        };
+        let alt = match &self.alternative {
+            Some(a) => a.string(),
+            None => "".to_string(),
+        };
+        out.push_str(&format!("if {} {} {}", self.condition, consequence, alt));
+        out
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BooleanLiteral {
+    pub token: Token,
+    pub value: bool,
+}
+
+impl BooleanLiteral {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    pub fn string(&self) -> String {
+        self.token.literal.clone()
     }
 }
 
@@ -159,8 +233,8 @@ impl IntegerLiteral {
 
 #[derive(Debug, Clone)]
 pub struct PrefixExpression {
-    pub token: Token, // The prefix token, e.g. !
-    pub operator: String, // The operator, e.g. !
+    pub token: Token,           // The prefix token, e.g. !
+    pub operator: String,       // The operator, e.g. !
     pub right: Box<Expression>, // The right expression
 }
 
@@ -175,9 +249,9 @@ impl PrefixExpression {
 
 #[derive(Debug, Clone)]
 pub struct InfixExpression {
-    pub token: Token, // The infix token, e.g. +
-    pub left: Box<Expression>, // The left expression
-    pub operator: String, // The operator, e.g. +
+    pub token: Token,           // The infix token, e.g. +
+    pub left: Box<Expression>,  // The left expression
+    pub operator: String,       // The operator, e.g. +
     pub right: Box<Expression>, // The right expression
 }
 
