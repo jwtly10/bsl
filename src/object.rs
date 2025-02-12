@@ -4,6 +4,7 @@ use std::any::Any;
 pub enum ObjectType {
     Integer,
     Boolean,
+    Return,
     Null,
 }
 
@@ -12,6 +13,7 @@ impl std::fmt::Display for ObjectType {
         match self {
             ObjectType::Integer => write!(f, "INTEGER"),
             ObjectType::Boolean => write!(f, "BOOLEAN"),
+            ObjectType::Return => write!(f, "RETURN_VALUE"),
             ObjectType::Null => write!(f, "NULL"),
         }
     }
@@ -21,6 +23,14 @@ pub trait Object: Any + std::fmt::Debug {
     fn type_(&self) -> ObjectType;
     fn inspect(&self) -> String;
     fn as_any(&self) -> &dyn Any;
+
+    fn clone_box(&self) -> Box<dyn Object>;
+}
+
+impl Clone for Box<dyn Object> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -39,6 +49,10 @@ impl Object for Integer {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
     }
 }
 
@@ -65,11 +79,38 @@ impl Object for Boolean {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
+    }
 }
 
 impl Boolean {
     pub fn new(value: bool) -> Self {
         Boolean { value }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Return {
+    pub value: Box<dyn Object>,
+}
+
+impl Object for Return {
+    fn type_(&self) -> ObjectType {
+        ObjectType::Return
+    }
+
+    fn inspect(&self) -> String {
+        self.value.inspect()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
     }
 }
 
@@ -88,11 +129,9 @@ impl Object for Null {
     fn as_any(&self) -> &dyn Any {
         self
     }
-}
 
-impl Default for Null {
-    fn default() -> Self {
-        Self::new()
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
     }
 }
 

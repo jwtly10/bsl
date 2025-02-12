@@ -642,7 +642,7 @@ mod tests {
             }
 
             let stmt = &program.statements[0];
-            match (stmt) {
+            match stmt {
                 Statement::Return(ret) => {
                     if !test_literal_expression(&ret.return_value, &expected_value) {
                         panic!("test_literal_expression failed for return_value");
