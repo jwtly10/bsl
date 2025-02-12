@@ -89,3 +89,15 @@ impl Object for Null {
         self
     }
 }
+
+impl Default for Null {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Null {
+    pub fn new() -> Self {
+        Null {}
+    }
+}

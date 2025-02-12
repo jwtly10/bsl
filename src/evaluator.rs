@@ -1,9 +1,20 @@
 use crate::ast::{Expression, Program, Statement};
-use crate::object::{Integer, Object};
+use crate::object::{Boolean, Integer, Null, Object};
+use std::fmt;
 
 #[derive(Debug, PartialEq)]
 pub enum EvalError {
+    UnknownIdentifier,
     Unimplemented,
+}
+
+impl fmt::Display for EvalError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            EvalError::UnknownIdentifier => write!(f, "Unknown identifier"),
+            EvalError::Unimplemented => write!(f, "Unimplemented"),
+        }
+    }
 }
 
 pub fn eval(program: &Program) -> Result<Box<dyn Object>, EvalError> {
@@ -11,7 +22,7 @@ pub fn eval(program: &Program) -> Result<Box<dyn Object>, EvalError> {
 }
 
 fn eval_statements(stmts: &[Statement]) -> Result<Box<dyn Object>, EvalError> {
-    let mut res: Result<Box<dyn Object>, EvalError> = Ok(Box::new(Integer::new(0)));
+    let mut res: Result<Box<dyn Object>, EvalError> = Ok(Box::new(Null {}));
     for stmt in stmts {
         res = eval_statement(stmt);
     }
@@ -22,14 +33,16 @@ fn eval_statements(stmts: &[Statement]) -> Result<Box<dyn Object>, EvalError> {
 fn eval_statement(stmt: &Statement) -> Result<Box<dyn Object>, EvalError> {
     match stmt {
         Statement::Expression(expr) => eval_expression(&expr.expression),
-        _ => Err(EvalError::Unimplemented),
+        _ => Err(EvalError::UnknownIdentifier),
     }
 }
 
 fn eval_expression(expr: &Expression) -> Result<Box<dyn Object>, EvalError> {
     match expr {
         Expression::IntegerLiteralExpr(il) => Ok(Box::new(Integer::new(il.value))),
-        _ => Err(EvalError::Unimplemented),
+        Expression::BooleanLiteralExpr(bl) => Ok(Box::new(Boolean::new(bl.value))),
+        Expression::Null => Ok(Box::new(Null::new())),
+        _ => Err(EvalError::UnknownIdentifier),
     }
 }
 
@@ -50,6 +63,16 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_eval_boolean_expression() {
+        let tests = vec![("true", true), ("false", false)];
+
+        for (input, expected) in tests {
+            let evaluated = test_eval(input);
+            test_boolean_object(evaluated, expected);
+        }
+    }
+
     // **************************************************** //
     // ***************** Helper functions ***************** //
     // **************************************************** //
@@ -67,6 +90,19 @@ mod tests {
             ObjectType::Integer => {
                 let integer = obj.as_any().downcast_ref::<Integer>().unwrap();
                 integer.value == expected
+            }
+            _ => false,
+        }
+    }
+
+    fn test_boolean_object(obj: Box<dyn Object>, expected: bool) -> bool {
+        match obj.type_() {
+            ObjectType::Boolean => {
+                let boolean = obj
+                    .as_any()
+                    .downcast_ref::<crate::object::Boolean>()
+                    .unwrap();
+                boolean.value == expected
             }
             _ => false,
         }

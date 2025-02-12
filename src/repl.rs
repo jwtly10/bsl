@@ -36,8 +36,17 @@ fn process_line(line: &str, out_stream: &mut dyn Write) -> io::Result<()> {
     }
 
     match eval(&program) {
-        Ok(obj) => writeln!(out_stream, "{}", obj.inspect())?,
-        Err(e) => writeln!(out_stream, "Evaluation error: {:?}", e)?,
+        Ok(obj) => {
+            if obj.type_() == crate::object::ObjectType::Null {
+                // Dont print anything (basically new line)
+            } else {
+                writeln!(out_stream, "{}", obj.inspect())?;
+            }
+        }
+        Err(e) => {
+            writeln!(out_stream, "evaluation error:")?;
+            writeln!(out_stream, "\t{}", e)?
+        }
     }
 
     Ok(())
