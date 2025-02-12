@@ -1,5 +1,5 @@
 use crate::ast::{BlockStatement, Expression, Program, Statement};
-use crate::object::{Boolean, Integer, Null, Object, ObjectType, Return};
+use crate::object::{Boolean, Error, Integer, Null, Object, ObjectType, Return};
 use std::fmt;
 
 #[derive(Debug, PartialEq)]
@@ -23,6 +23,10 @@ pub fn eval(program: &Program) -> Result<Box<dyn Object>, EvalError> {
         return Ok(return_value.value.clone());
     }
 
+    if evaluated.type_() == ObjectType::Error {
+        return Ok(evaluated);
+    }
+
     Ok(evaluated)
 }
 
@@ -32,7 +36,9 @@ fn eval_statements(stmts: &[Statement]) -> Result<Box<dyn Object>, EvalError> {
         res = eval_statement(stmt);
 
         match res.as_ref() {
-            Ok(obj) if obj.type_() == ObjectType::Return => return res,
+            Ok(obj) if obj.type_() == ObjectType::Return || obj.type_() == ObjectType::Error => {
+                return res
+            }
             Ok(_) => (), // Continue if not return
             Err(_) => return res,
         }
@@ -84,7 +90,9 @@ fn eval_block_statement(block: &BlockStatement) -> Result<Box<dyn Object>, EvalE
 
         // A block may contain a return value, in which case we should return instantly
         match res.as_ref() {
-            Ok(obj) if obj.type_() == ObjectType::Return => return res,
+            Ok(obj) if obj.type_() == ObjectType::Return || obj.type_() == ObjectType::Error => {
+                return res
+            }
             Ok(_) => (), // Continue if not return
             Err(_) => return res,
         }
@@ -126,7 +134,11 @@ fn eval_prefix_expression(
     match operator {
         "!" => eval_bang_operator_expression(right),
         "-" => eval_minus_prefix_operator_expression(right),
-        _ => Err(EvalError::UnknownIdentifier(operator.to_string())),
+        _ => Ok(new_error(format!(
+            "unknown operator: {}{}",
+            operator,
+            right.type_()
+        ))),
     }
 }
 
@@ -146,13 +158,20 @@ fn eval_infix_expression(
         let right = right.as_any().downcast_ref::<Boolean>().unwrap();
 
         eval_boolean_infix_expression(operator, left, right)
+    } else if left.type_() != right.type_() {
+        Ok(new_error(format!(
+            "type mismatch: {} {} {}",
+            left.type_(),
+            operator,
+            right.type_()
+        )))
     } else {
-        Ok(Box::new(Null::new()))
-        // Err(EvalError::UnknownIdentifier(format!(
-        //     "Infix operator not supported for {:?} and {:?}",
-        //     left.type_(),
-        //     right.type_()
-        // )))
+        Ok(new_error(format!(
+            "unknown operator: {} {} {}",
+            left.type_(),
+            operator,
+            right.type_()
+        )))
     }
 }
 
@@ -170,8 +189,12 @@ fn eval_integer_infix_expression(
         ">" => Ok(Box::new(Boolean::new(left.value > right.value))),
         "==" => Ok(Box::new(Boolean::new(left.value == right.value))),
         "!=" => Ok(Box::new(Boolean::new(left.value != right.value))),
-        _ => Ok(Box::new(Null::new())),
-        // _ => Err(EvalError::UnknownIdentifier(operator.to_string())),
+        _ => Ok(new_error(format!(
+            "unknown operator: {} {} {}",
+            left.type_(),
+            operator,
+            right.type_()
+        ))),
     }
 }
 
@@ -183,11 +206,12 @@ fn eval_boolean_infix_expression(
     match operator {
         "==" => Ok(Box::new(Boolean::new(left.value == right.value))),
         "!=" => Ok(Box::new(Boolean::new(left.value != right.value))),
-        _ => Ok(Box::new(Null::new())),
-        // _ => Err(EvalError::UnknownIdentifier(format!(
-        //     "Unsupported operator for type BOOL: {}",
-        //     operator
-        // ))),
+        _ => Ok(new_error(format!(
+            "unknown operator: {} {} {}",
+            left.type_(),
+            operator,
+            right.type_()
+        ))),
     }
 }
 
@@ -202,10 +226,7 @@ fn eval_bang_operator_expression(right: Box<dyn Object>) -> Result<Box<dyn Objec
             Ok(Box::new(Boolean::new(integer.value == 0)))
         }
         ObjectType::Null => Ok(Box::new(Boolean::new(true))),
-        _ => Err(EvalError::UnknownIdentifier(format!(
-            "Bang operator not supported for {:?}",
-            right.type_()
-        ))),
+        _ => Ok(new_error(format!("unknown operator: !{}", right.type_()))),
     }
 }
 
@@ -217,19 +238,19 @@ fn eval_minus_prefix_operator_expression(
             let integer = right.as_any().downcast_ref::<Integer>().unwrap();
             Ok(Box::new(Integer::new(-integer.value)))
         }
-        // _ => Err(EvalError::UnknownIdentifier(format!(
-        //     "Minus operator not supported for {:?}",
-        //     right.type_()
-        // ))),
-        _ => Ok(Box::new(Null::new())),
+        _ => Ok(new_error(format!("unknown operator: -{}", right.type_()))),
     }
+}
+
+fn new_error(msg: String) -> Box<dyn Object> {
+    Box::new(Error { message: msg })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::lexer::Lexer;
-    use crate::object::{Integer, Null, ObjectType};
+    use crate::object::{Error, Integer, Null, ObjectType};
     use crate::parser::Parser;
 
     #[test]
@@ -369,6 +390,56 @@ mod tests {
             if !test_integer_object(&evaluated, expected) {
                 panic!("Expected: {}, Actual: {:?}", expected, evaluated);
             }
+        }
+    }
+
+    #[test]
+    fn test_error_handlng() {
+        let tests = vec![
+            ("5 + true;", "type mismatch: INTEGER + BOOLEAN"),
+            ("5 + true; 5;", "type mismatch: INTEGER + BOOLEAN"),
+            ("-true", "unknown operator: -BOOLEAN"),
+            ("true + false", "unknown operator: BOOLEAN + BOOLEAN"),
+            ("5; true + false; 5", "unknown operator: BOOLEAN + BOOLEAN"),
+            (
+                "if (10 > 1 ) { true + false; }",
+                "unknown operator: BOOLEAN + BOOLEAN",
+            ),
+            (
+                "if (10 > 1 ) {\n\
+                    if (10 > 1 ) {\n\
+                        return true + false;\n\
+                    }\n\
+                return 1;\n\
+                }",
+                "unknown operator: BOOLEAN + BOOLEAN",
+            ),
+        ];
+
+        let mut errs = 0;
+
+        for (input, expected) in tests {
+            let evaluated = test_eval(input);
+
+            match evaluated.type_() {
+                ObjectType::Error => {
+                    let err_msg = evaluated.as_any().downcast_ref::<Error>().unwrap();
+                    if err_msg.message != expected {
+                        errs += 1;
+                        println!("For input: {}", input);
+                        eprintln!("Expected: {}, Actual: {:?}", expected, err_msg.message);
+                    }
+                }
+                _ => {
+                    errs += 1;
+                    println!("For input: {}", input);
+                    eprintln!("Expected type: Error, got: {:?}", evaluated)
+                }
+            }
+        }
+
+        if errs > 0 {
+            panic!("test failed. {} errors found", errs);
         }
     }
 

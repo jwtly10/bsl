@@ -5,6 +5,7 @@ pub enum ObjectType {
     Integer,
     Boolean,
     Return,
+    Error,
     Null,
 }
 
@@ -14,6 +15,7 @@ impl std::fmt::Display for ObjectType {
             ObjectType::Integer => write!(f, "INTEGER"),
             ObjectType::Boolean => write!(f, "BOOLEAN"),
             ObjectType::Return => write!(f, "RETURN_VALUE"),
+            ObjectType::Error => write!(f, "ERROR"),
             ObjectType::Null => write!(f, "NULL"),
         }
     }
@@ -103,6 +105,29 @@ impl Object for Return {
 
     fn inspect(&self) -> String {
         self.value.inspect()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Error {
+    pub message: String,
+}
+
+impl Object for Error {
+    fn type_(&self) -> ObjectType {
+        ObjectType::Error
+    }
+
+    fn inspect(&self) -> String {
+        format!("ERROR: {}", self.message)
     }
 
     fn as_any(&self) -> &dyn Any {
