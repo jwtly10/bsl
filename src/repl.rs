@@ -53,8 +53,8 @@ fn process_line(line: &str, out_stream: &mut dyn Write) -> io::Result<()> {
 }
 
 fn print_parser_errors(out_stream: &mut dyn Write, errors: &Vec<ParseError>) {
+    writeln!(out_stream, "parser errors:").expect("Failed to write error sub text to output");
     for error in errors {
-        writeln!(out_stream, "parser errors:").expect("Failed to write error sub text to output");
         writeln!(out_stream, "\t{}", error).expect("Failed to write error to output");
     }
 }
