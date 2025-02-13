@@ -1,6 +1,6 @@
 use crate::ast::{BlockStatement, Expression, Identifier, LetStatement, Program, Statement};
 use crate::environment::Environment;
-use crate::object::{Boolean, Error, Integer, Null, Object, ObjectType, Return};
+use crate::object::{Boolean, Error, Function, Integer, Null, Object, ObjectType, Return};
 use std::fmt;
 
 #[derive(Debug, PartialEq)]
@@ -80,6 +80,31 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Box<dyn O
 
         Expression::IdentifierExpr(ident) => eval_identifier(ident, env),
 
+        Expression::FunctionExpr(fe) => Ok(Box::new(Function::new(
+            fe.parameters.clone(),
+            fe.body.clone(),
+            env.clone(),
+        ))),
+
+        Expression::CallExpr(ce) => {
+            let function = eval_expression(&ce.function, env)?;
+            if function.type_() == ObjectType::Error {
+                return Ok(function);
+            }
+
+            let args = ce
+                .arguments
+                .iter()
+                .map(|arg| eval_expression(arg, env))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            if args.len() == 1 && args[0].type_() == ObjectType::Error {
+                return Ok(args[0].clone());
+            } else {
+                Ok(apply_function(function, args))
+            }
+        }
+
         Expression::Null => Ok(Box::new(Null::new())),
 
         Expression::PrefixExpr(pe) => {
@@ -93,11 +118,51 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Box<dyn O
             eval_infix_expression(&ie.operator, left, right)
         }
         Expression::IfExpr(ie) => eval_if_expression(ie, env),
-        // _ => Ok(Box::new(Null::new()))
         expr => Err(EvalError::UnknownIdentifier(
             expr.token_literal().to_string(),
         )),
     }
+}
+
+fn apply_function(func: Box<dyn Object>, args: Vec<Box<dyn Object>>) -> Box<dyn Object> {
+    match func.type_() {
+        ObjectType::Function => {
+            let function = func.as_any().downcast_ref::<Function>().unwrap();
+            let mut extended_env = extend_function_env(function.clone(), args);
+            let evaluated = eval_block_statement(&function.body, &mut extended_env);
+
+            match evaluated {
+                Ok(obj) => {
+                    if obj.type_() == ObjectType::Return {
+                        let return_value = obj.as_any().downcast_ref::<Return>().unwrap();
+                        return unwrap_return_value(obj);
+                    }
+                    obj
+                }
+                Err(_) => evaluated.unwrap(),
+            }
+        }
+        _ => new_error(format!("not a function: {}", func.type_())),
+    }
+}
+
+fn extend_function_env(func: Function, args: Vec<Box<dyn Object>>) -> Environment {
+    let mut env = Environment::new_enclosed(func.env.clone());
+
+    for (i, param) in func.parameters.iter().enumerate() {
+        env.set(param.value.as_str(), args[i].clone());
+    }
+
+    env
+}
+
+fn unwrap_return_value(obj: Box<dyn Object>) -> Box<dyn Object> {
+    if obj.type_() == ObjectType::Return {
+        let return_value = obj.as_any().downcast_ref::<Return>().unwrap();
+        return return_value.value.clone();
+    }
+
+    obj
 }
 
 fn eval_block_statement(
@@ -501,6 +566,84 @@ mod tests {
 
         if errs > 1 {
             panic!("Test failed with {} error", errs);
+        }
+    }
+
+    #[test]
+    fn test_function_object() {
+        let input = "fn(x) { x + 2; };";
+
+        let evaluated = test_eval(input);
+
+        match evaluated.type_() {
+            ObjectType::Function => {
+                let function = evaluated
+                    .as_any()
+                    .downcast_ref::<crate::object::Function>()
+                    .unwrap();
+                if function.parameters.len() != 1 {
+                    panic!("Expected 1 parameter, got: {}", function.parameters.len());
+                }
+
+                if function.parameters[0].value != "x" {
+                    panic!(
+                        "Expected parameter name: x, got: {}",
+                        function.parameters[0].value
+                    );
+                }
+
+                let expected_body = "(x + 2)";
+                if function.body.string() != expected_body {
+                    panic!(
+                        "Expected body: {}, got: {}",
+                        expected_body,
+                        function.body.string()
+                    );
+                }
+            }
+            _ => panic!("Expected Function, got: {:?}", evaluated),
+        }
+    }
+
+    #[test]
+    fn test_function_application() {
+        let tests = vec![
+            ("let identity = fn(x) {x;}; identity(5);", 5),
+            ("let identity = fn(x) {return x;}; identity(5);", 5),
+            ("let double = fn(x) {x * 2;}; double(5);", 10),
+            ("let add = fn(x, y) {x + y;}; add(5, 5);", 10),
+            ("let add = fn(x, y) {x + y;}; add(5 + 5, add(5, 5));", 20),
+            ("fn(x) {x;}(5)", 5),
+        ];
+
+        let mut errs = 0;
+        for (input, expected) in tests {
+            let evaluated = test_eval(input);
+            if !test_integer_object(&evaluated, expected) {
+                errs += 1;
+                eprintln!("For input: {}", input);
+                eprintln!("Expected: {}, Actual: {:?}", expected, evaluated);
+            }
+        }
+
+        if errs > 1 {
+            panic!("Test failed with {} error", errs);
+        }
+    }
+
+    #[test]
+    fn test_closures() {
+        let input = "\n\
+                     let newAdder = fn(x) {\n\
+                            fn(y) { x + y };\n\
+                        };\n\
+                        let addTwo = newAdder(2);\n\
+                        addTwo(2);";
+
+        let evaluated = test_eval(input);
+
+        if !test_integer_object(&evaluated, 4) {
+            panic!("Expected 4, got: {:?}", evaluated);
         }
     }
 

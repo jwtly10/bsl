@@ -1,10 +1,16 @@
 use std::any::Any;
 
+use crate::{
+    ast::{BlockStatement, Identifier},
+    environment::Environment,
+};
+
 #[derive(Debug, PartialEq)]
 pub enum ObjectType {
     Integer,
     Boolean,
     Return,
+    Function,
     Error,
     Null,
 }
@@ -15,6 +21,7 @@ impl std::fmt::Display for ObjectType {
             ObjectType::Integer => write!(f, "INTEGER"),
             ObjectType::Boolean => write!(f, "BOOLEAN"),
             ObjectType::Return => write!(f, "RETURN_VALUE"),
+            ObjectType::Function => write!(f, "FUNCTION"),
             ObjectType::Error => write!(f, "ERROR"),
             ObjectType::Null => write!(f, "NULL"),
         }
@@ -113,6 +120,42 @@ impl Object for Return {
 
     fn clone_box(&self) -> Box<dyn Object> {
         Box::new(self.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub parameters: Vec<Identifier>,
+    pub body: BlockStatement,
+    pub env: Environment,
+}
+
+impl Object for Function {
+    fn type_(&self) -> ObjectType {
+        ObjectType::Function
+    }
+
+    fn inspect(&self) -> String {
+        let params: Vec<String> = self.parameters.iter().map(|p| p.string()).collect();
+        format!("fn({}) {{\n{}\n}}", params.join(", "), self.body.string())
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
+    }
+}
+
+impl Function {
+    pub fn new(parameters: Vec<Identifier>, body: BlockStatement, env: Environment) -> Self {
+        Function {
+            parameters,
+            body,
+            env,
+        }
     }
 }
 
