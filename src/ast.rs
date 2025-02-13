@@ -139,9 +139,11 @@ pub enum Expression {
     IdentifierExpr(Identifier),
     IntegerLiteralExpr(IntegerLiteral),
     BooleanLiteralExpr(BooleanLiteral),
-    FunctionExpr(FunctionLiteral),
+    StringLiteralExpr(StringLiteral),
 
+    FunctionExpr(FunctionLiteral),
     CallExpr(CallExpression),
+
     IfExpr(IfExpression),
     PrefixExpr(PrefixExpression),
     InfixExpr(InfixExpression),
@@ -154,9 +156,11 @@ impl fmt::Display for Expression {
             Expression::IdentifierExpr(i) => write!(f, "{}", i.value),
             Expression::IntegerLiteralExpr(il) => write!(f, "{}", il.value),
             Expression::BooleanLiteralExpr(b) => write!(f, "{}", b.value),
-            Expression::FunctionExpr(fl) => write!(f, "{}", fl.token.literal),
+            Expression::StringLiteralExpr(s) => write!(f, "{}", s.value),
 
+            Expression::FunctionExpr(fl) => write!(f, "{}", fl.token.literal),
             Expression::CallExpr(ce) => write!(f, "{}", ce.string()),
+
             Expression::IfExpr(ie) => write!(f, "{}", ie.string()),
             Expression::PrefixExpr(pe) => write!(f, "{}", pe.string()),
             Expression::InfixExpr(ie) => write!(f, "{}", ie.string()),
@@ -171,9 +175,11 @@ impl Expression {
             Expression::IdentifierExpr(i) => i.token_literal(),
             Expression::IntegerLiteralExpr(il) => il.token_literal(),
             Expression::BooleanLiteralExpr(b) => b.token.literal.clone(),
-            Expression::FunctionExpr(fl) => fl.token.literal.clone(),
+            Expression::StringLiteralExpr(s) => s.token.literal.clone(),
 
+            Expression::FunctionExpr(fl) => fl.token.literal.clone(),
             Expression::CallExpr(ce) => ce.token_literal(),
+
             Expression::IfExpr(ie) => ie.token_literal(),
             Expression::PrefixExpr(pe) => pe.token_literal(),
             Expression::InfixExpr(ie) => ie.token_literal(),
@@ -282,6 +288,21 @@ pub struct IntegerLiteral {
 }
 
 impl IntegerLiteral {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    pub fn string(&self) -> String {
+        self.token.literal.clone()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StringLiteral {
+    pub token: Token,
+    pub value: String,
+}
+
+impl StringLiteral {
     pub fn token_literal(&self) -> String {
         self.token.literal.clone()
     }

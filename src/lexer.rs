@@ -167,6 +167,8 @@ impl Lexer {
                 self.read_char();
                 tok
             }
+            // String literals
+            Some('"') => Token::new(TokenType::String, self.read_string()),
             // EOF
             None => Token::new(TokenType::Eof, String::new()),
             Some(ch) => {
@@ -185,6 +187,22 @@ impl Lexer {
                 }
             }
         }
+    }
+
+    fn read_string(&mut self) -> String {
+        let start_pos = self.position + 1; // Skip the opening quote
+        self.read_char(); // Skip the opening quote
+
+        while let Some(ch) = self.ch {
+            if ch == '"' || ch == '\0' {
+                break;
+            }
+            self.read_char()
+        }
+
+        let end_pos = self.position; // the last position before non-letter match
+        self.read_char(); // Skip the closing quote
+        self.input[start_pos..end_pos].to_string()
     }
 }
 
@@ -330,7 +348,16 @@ mod tests {
              };\n\
              let result = add(five, ten);\n\
              !-/*5;
-             5 <10 > 5;\n\
+             5 < 10 > 5;\n\
+             if (5<10){\n\
+                 return true;\n\
+             } else { \n\
+                 return false;\n\
+             }\n\
+             10 == 10;\n\
+             10 != 9;\n\
+             \"foobar\";\n\
+             \"foo bar\";\n\
              ";
 
         let tests = vec![
@@ -381,6 +408,35 @@ mod tests {
             (TokenType::Int, "10"),
             (TokenType::GT, ">"),
             (TokenType::Int, "5"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::If, "if"),
+            (TokenType::Lparen, "("),
+            (TokenType::Int, "5"),
+            (TokenType::LT, "<"),
+            (TokenType::Int, "10"),
+            (TokenType::Rparen, ")"),
+            (TokenType::Lbrace, "{"),
+            (TokenType::Return, "return"),
+            (TokenType::True, "true"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Rbrace, "}"),
+            (TokenType::Else, "else"),
+            (TokenType::Lbrace, "{"),
+            (TokenType::Return, "return"),
+            (TokenType::False, "false"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Rbrace, "}"),
+            (TokenType::Int, "10"),
+            (TokenType::Eq, "=="),
+            (TokenType::Int, "10"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Int, "10"),
+            (TokenType::NotEq, "!="),
+            (TokenType::Int, "9"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::String, "foobar"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::String, "foo bar"),
             (TokenType::Semicolon, ";"),
             (TokenType::Eof, ""),
         ];

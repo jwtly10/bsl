@@ -1,6 +1,8 @@
-use crate::ast::{BlockStatement, Expression, Identifier, LetStatement, Program, Statement};
+use crate::ast::{BlockStatement, Expression, Identifier, Program, Statement};
 use crate::environment::Environment;
-use crate::object::{Boolean, Error, Function, Integer, Null, Object, ObjectType, Return};
+use crate::object::{
+    Boolean, Error, Function, Integer, Null, Object, ObjectType, Return, StringLit,
+};
 use std::fmt;
 
 #[derive(Debug, PartialEq)]
@@ -77,6 +79,7 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Box<dyn O
     match expr {
         Expression::IntegerLiteralExpr(il) => Ok(Box::new(Integer::new(il.value))),
         Expression::BooleanLiteralExpr(bl) => Ok(Box::new(Boolean::new(bl.value))),
+        Expression::StringLiteralExpr(sl) => Ok(Box::new(StringLit::new(sl.value.clone()))),
 
         Expression::IdentifierExpr(ident) => eval_identifier(ident, env),
 
@@ -351,7 +354,7 @@ fn new_error(msg: String) -> Box<dyn Object> {
 mod tests {
     use super::*;
     use crate::lexer::Lexer;
-    use crate::object::{Error, Integer, Null, ObjectType};
+    use crate::object::{Error, Integer, Null, ObjectType, StringLit};
     use crate::parser::Parser;
 
     #[test]
@@ -647,6 +650,23 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_string_literal() {
+        let input = "\"Hello World!\"";
+
+        let evaluated = test_eval(input);
+
+        match evaluated.type_() {
+            ObjectType::StringLit => {
+                let string = evaluated.as_any().downcast_ref::<StringLit>().unwrap();
+                if string.value != "Hello World!" {
+                    panic!("Expected 'Hello World!', got: {}", string.value);
+                }
+            }
+            _ => panic!("Expected String, got: {:?}", evaluated),
+        }
+    }
+
     // **************************************************** //
     // ***************** Helper functions ***************** //
     // **************************************************** //
@@ -657,6 +677,8 @@ mod tests {
         let program = p.parse_program();
         let mut env = Environment::new();
 
+        // TODO: We need to remove this .expect, as it causes bad error message which
+        // we wont be able to feed into repl/interpreter
         eval(&program, &mut env).expect("Evaluation failed")
     }
 

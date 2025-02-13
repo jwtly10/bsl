@@ -2,7 +2,7 @@ use crate::ast::Expression::Null;
 use crate::ast::{
     BlockStatement, BooleanLiteral, CallExpression, Expression, ExpressionStatement,
     FunctionLiteral, Identifier, IfExpression, InfixExpression, IntegerLiteral, LetStatement,
-    PrefixExpression, Program, ReturnStatement, Statement,
+    PrefixExpression, Program, ReturnStatement, Statement, StringLiteral,
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
@@ -119,6 +119,7 @@ impl Parser {
 
         p.register_prefix(TokenType::Ident, Parser::parse_identifier);
         p.register_prefix(TokenType::Int, Parser::parse_integer_literal);
+        p.register_prefix(TokenType::String, Parser::parse_string_literal);
 
         p.register_prefix(TokenType::Bang, Parser::parse_prefix_expression);
         p.register_prefix(TokenType::Minus, Parser::parse_prefix_expression);
@@ -316,6 +317,13 @@ impl Parser {
                 value: cur_token_lit,
             }),
         }
+    }
+
+    fn parse_string_literal(&mut self) -> Result<Expression, ParseError> {
+        Ok(Expression::StringLiteralExpr(StringLiteral {
+            token: self.cur_token.clone(),
+            value: self.cur_token.literal.clone(),
+        }))
     }
 
     fn parse_function_literal(&mut self) -> Result<Expression, ParseError> {
@@ -1191,6 +1199,41 @@ mod tests {
 
         let arg3 = &call_expr.arguments[2];
         test_infix_expression(arg3, &ExpectedValue::Int(4), "+", &ExpectedValue::Int(5));
+    }
+
+    #[test]
+    fn test_string_literal_expression() {
+        let input = "\"hello world\";";
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer).unwrap();
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
+
+        if program.statements.len() != 1 {
+            panic!(
+                "program.statements does not contain 1 statement. got='{:?}'",
+                program.statements.len()
+            );
+        }
+
+        let stmt = &program.statements[0];
+        let litteral = match stmt {
+            Statement::Expression(expr_stmt) => expr_stmt,
+            _ => panic!("stmt not ExpressionStatement. got='{:?}'", stmt),
+        };
+
+        let string_lit = match &litteral.expression {
+            Expression::StringLiteralExpr(string_lit) => string_lit,
+            _ => panic!("expr not StringLiteral. got='{:?}'", litteral.expression),
+        };
+
+        if string_lit.value != "hello world" {
+            panic!(
+                "string_lit.value not 'hello world'. got='{}'",
+                string_lit.value
+            );
+        }
     }
 
     // **************************************************** //

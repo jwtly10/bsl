@@ -9,6 +9,8 @@ use crate::{
 pub enum ObjectType {
     Integer,
     Boolean,
+    StringLit,
+
     Return,
     Function,
     Error,
@@ -20,6 +22,8 @@ impl std::fmt::Display for ObjectType {
         match self {
             ObjectType::Integer => write!(f, "INTEGER"),
             ObjectType::Boolean => write!(f, "BOOLEAN"),
+            ObjectType::StringLit => write!(f, "STRING"),
+
             ObjectType::Return => write!(f, "RETURN_VALUE"),
             ObjectType::Function => write!(f, "FUNCTION"),
             ObjectType::Error => write!(f, "ERROR"),
@@ -97,6 +101,35 @@ impl Object for Boolean {
 impl Boolean {
     pub fn new(value: bool) -> Self {
         Boolean { value }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StringLit {
+    pub value: String,
+}
+
+impl StringLit {
+    pub fn new(value: String) -> Self {
+        StringLit { value }
+    }
+}
+
+impl Object for StringLit {
+    fn type_(&self) -> ObjectType {
+        ObjectType::StringLit
+    }
+
+    fn inspect(&self) -> String {
+        self.value.clone()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
     }
 }
 

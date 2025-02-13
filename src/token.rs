@@ -9,6 +9,7 @@ pub enum TokenType {
     // Identifiers + literals
     Ident,
     Int,
+    String,
 
     // Operators
     Assign,
@@ -52,6 +53,7 @@ impl std::fmt::Display for TokenType {
             // Identifiers + literals
             TokenType::Ident => write!(f, "IDENT"),
             TokenType::Int => write!(f, "INT"),
+            TokenType::String => write!(f, "STRING"),
 
             // Operators
             TokenType::Assign => write!(f, "="),
@@ -110,7 +112,7 @@ lazy_static! {
     static ref KEYWORDS: HashMap<&'static str, TokenType> = {
         let mut m = HashMap::new();
         m.insert("fn", TokenType::Function);
-        m.insert("let", TokenType::Let );
+        m.insert("let", TokenType::Let);
         m.insert("true", TokenType::True);
         m.insert("false", TokenType::False);
         m.insert("if", TokenType::If);
@@ -137,4 +139,3 @@ mod tests {
         assert_eq!(TokenType::Let, lookup_identifier("let"))
     }
 }
-
