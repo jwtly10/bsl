@@ -1,3 +1,4 @@
+use crate::environment::Environment;
 use crate::evaluator::eval;
 use crate::lexer::Lexer;
 use crate::parser::{ParseError, Parser};
@@ -7,6 +8,7 @@ use std::io::{BufRead, Write};
 static PROMPT: &str = ">> ";
 
 pub fn start_repl(in_stream: &mut dyn BufRead, out_stream: &mut dyn Write) -> io::Result<()> {
+    let mut env = Environment::new();
     loop {
         write!(out_stream, "{}", PROMPT)?;
         out_stream.flush()?;
@@ -18,13 +20,13 @@ pub fn start_repl(in_stream: &mut dyn BufRead, out_stream: &mut dyn Write) -> io
             break; // EOF
         }
 
-        process_line(line.trim(), out_stream)?;
+        process_line(line.trim(), out_stream, &mut env)?;
     }
 
     Ok(())
 }
 
-fn process_line(line: &str, out_stream: &mut dyn Write) -> io::Result<()> {
+fn process_line(line: &str, out_stream: &mut dyn Write, env: &mut Environment) -> io::Result<()> {
     let lexer = Lexer::new(line.to_string());
     // TODO: remove .expect()
     let mut parser = Parser::new(lexer).expect("Failed to create parser... should not happen");
@@ -35,7 +37,7 @@ fn process_line(line: &str, out_stream: &mut dyn Write) -> io::Result<()> {
         return Ok(());
     }
 
-    match eval(&program) {
+    match eval(&program, env) {
         Ok(obj) => {
             if obj.type_() == crate::object::ObjectType::Null {
                 // Dont print anything (basically new line)

@@ -614,6 +614,16 @@ mod tests {
             if !test_let_statement(stmt, expected_ident) {
                 panic!("test_let_statement failed for statement");
             }
+
+            // Use expected value
+            let let_stmt = match stmt {
+                Statement::Let(stmt) => stmt,
+                _ => panic!("stmt not LetStatement. got='{:?}'", stmt),
+            };
+
+            if !test_literal_expression(&let_stmt.value, &expected_value) {
+                panic!("test_literal_expression failed for let_stmt.value");
+            }
         }
     }
 

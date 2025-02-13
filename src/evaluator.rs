@@ -1,4 +1,5 @@
-use crate::ast::{BlockStatement, Expression, Program, Statement};
+use crate::ast::{BlockStatement, Expression, Identifier, LetStatement, Program, Statement};
+use crate::environment::Environment;
 use crate::object::{Boolean, Error, Integer, Null, Object, ObjectType, Return};
 use std::fmt;
 
@@ -15,8 +16,8 @@ impl fmt::Display for EvalError {
     }
 }
 
-pub fn eval(program: &Program) -> Result<Box<dyn Object>, EvalError> {
-    let evaluated = eval_statements(&program.statements)?;
+pub fn eval(program: &Program, env: &mut Environment) -> Result<Box<dyn Object>, EvalError> {
+    let evaluated = eval_statements(&program.statements, env)?;
 
     if evaluated.type_() == ObjectType::Return {
         let return_value = evaluated.as_any().downcast_ref::<Return>().unwrap();
@@ -30,10 +31,13 @@ pub fn eval(program: &Program) -> Result<Box<dyn Object>, EvalError> {
     Ok(evaluated)
 }
 
-fn eval_statements(stmts: &[Statement]) -> Result<Box<dyn Object>, EvalError> {
+fn eval_statements(
+    stmts: &[Statement],
+    env: &mut Environment,
+) -> Result<Box<dyn Object>, EvalError> {
     let mut res: Result<Box<dyn Object>, EvalError> = Ok(Box::new(Null {}));
     for stmt in stmts {
-        res = eval_statement(stmt);
+        res = eval_statement(stmt, env);
 
         match res.as_ref() {
             Ok(obj) if obj.type_() == ObjectType::Return || obj.type_() == ObjectType::Error => {
@@ -47,35 +51,48 @@ fn eval_statements(stmts: &[Statement]) -> Result<Box<dyn Object>, EvalError> {
     res
 }
 
-fn eval_statement(stmt: &Statement) -> Result<Box<dyn Object>, EvalError> {
+fn eval_statement(stmt: &Statement, env: &mut Environment) -> Result<Box<dyn Object>, EvalError> {
     match stmt {
-        Statement::Expression(expr) => eval_expression(&expr.expression),
+        Statement::Expression(expr) => eval_expression(&expr.expression, env),
+        Statement::Let(ls) => {
+            let val = eval_expression(&ls.value, env)?;
+            // Return error early
+            if val.type_() == ObjectType::Error {
+                return Ok(val);
+            }
+
+            // Else set the value in the environment
+            env.set(ls.name.value.as_str(), val.clone());
+            Ok(Box::new(Null::new())) // TODO: What should we actually be returning here?
+        }
         Statement::Return(ret) => {
-            let val = eval_expression(&ret.return_value)?;
+            let val = eval_expression(&ret.return_value, env)?;
             Ok(Box::new(Return { value: val }))
         }
         stmt => Err(EvalError::UnknownIdentifier(format!("{:?}", stmt))),
     }
 }
 
-fn eval_expression(expr: &Expression) -> Result<Box<dyn Object>, EvalError> {
+fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Box<dyn Object>, EvalError> {
     match expr {
         Expression::IntegerLiteralExpr(il) => Ok(Box::new(Integer::new(il.value))),
         Expression::BooleanLiteralExpr(bl) => Ok(Box::new(Boolean::new(bl.value))),
 
+        Expression::IdentifierExpr(ident) => eval_identifier(ident, env),
+
         Expression::Null => Ok(Box::new(Null::new())),
 
         Expression::PrefixExpr(pe) => {
-            let right = eval_expression(&pe.right)?;
+            let right = eval_expression(&pe.right, env)?;
             eval_prefix_expression(&pe.operator, right)
         }
         Expression::InfixExpr(ie) => {
-            let left = eval_expression(&ie.left)?;
-            let right = eval_expression(&ie.right)?;
+            let left = eval_expression(&ie.left, env)?;
+            let right = eval_expression(&ie.right, env)?;
 
             eval_infix_expression(&ie.operator, left, right)
         }
-        Expression::IfExpr(ie) => eval_if_expression(ie),
+        Expression::IfExpr(ie) => eval_if_expression(ie, env),
         // _ => Ok(Box::new(Null::new()))
         expr => Err(EvalError::UnknownIdentifier(
             expr.token_literal().to_string(),
@@ -83,10 +100,13 @@ fn eval_expression(expr: &Expression) -> Result<Box<dyn Object>, EvalError> {
     }
 }
 
-fn eval_block_statement(block: &BlockStatement) -> Result<Box<dyn Object>, EvalError> {
+fn eval_block_statement(
+    block: &BlockStatement,
+    env: &mut Environment,
+) -> Result<Box<dyn Object>, EvalError> {
     let mut res: Result<Box<dyn Object>, EvalError> = Ok(Box::new(Null::new()));
     for stmt in &block.statements {
-        res = eval_statement(stmt);
+        res = eval_statement(stmt, env);
 
         // A block may contain a return value, in which case we should return instantly
         match res.as_ref() {
@@ -101,16 +121,19 @@ fn eval_block_statement(block: &BlockStatement) -> Result<Box<dyn Object>, EvalE
     res
 }
 
-fn eval_if_expression(ie: &crate::ast::IfExpression) -> Result<Box<dyn Object>, EvalError> {
-    let condition = eval_expression(&ie.condition)?;
+fn eval_if_expression(
+    ie: &crate::ast::IfExpression,
+    env: &mut Environment,
+) -> Result<Box<dyn Object>, EvalError> {
+    let condition = eval_expression(&ie.condition, env)?;
     if is_truthy(condition) {
         if let Some(consequence) = &ie.consequence {
-            eval_block_statement(consequence)
+            eval_block_statement(consequence, env)
         } else {
             Ok(Box::new(Null::new()))
         }
     } else if let Some(alternative) = &ie.alternative {
-        eval_block_statement(alternative)
+        eval_block_statement(alternative, env)
     } else {
         Ok(Box::new(Null::new()))
     }
@@ -124,6 +147,19 @@ fn is_truthy(obj: Box<dyn Object>) -> bool {
             boolean.value
         }
         _ => true,
+    }
+}
+
+fn eval_identifier(
+    ident: &Identifier,
+    env: &mut Environment,
+) -> Result<Box<dyn Object>, EvalError> {
+    match env.get(ident.value.as_str()) {
+        Some(obj) => Ok(obj),
+        None => Ok(new_error(format!(
+            "identifier not found: {}",
+            ident.value.as_str()
+        ))),
     }
 }
 
@@ -414,6 +450,7 @@ mod tests {
                 }",
                 "unknown operator: BOOLEAN + BOOLEAN",
             ),
+            ("foobar", "identifier not found: foobar"),
         ];
 
         let mut errs = 0;
@@ -443,6 +480,30 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_let_statements() {
+        let tests = vec![
+            ("let a = 5; a;", 5),
+            ("let a = 5 * 5; a;", 25),
+            ("let a = 5; let b = a; b;", 5),
+            ("let a = 5; let b = a; let c = a + b + 5; c;", 15),
+        ];
+
+        let mut errs = 0;
+        for (input, expected) in tests {
+            let evaluated = test_eval(input);
+            if !test_integer_object(&evaluated, expected) {
+                errs += 1;
+                eprintln!("For input: {}", input);
+                eprintln!("Expected: {}, Actual: {:?}", expected, evaluated);
+            }
+        }
+
+        if errs > 1 {
+            panic!("Test failed with {} error", errs);
+        }
+    }
+
     // **************************************************** //
     // ***************** Helper functions ***************** //
     // **************************************************** //
@@ -451,8 +512,9 @@ mod tests {
         let l = Lexer::new(input.to_string());
         let mut p = Parser::new(l).expect("Parser creation failed");
         let program = p.parse_program();
+        let mut env = Environment::new();
 
-        eval(&program).expect("Evaluation failed")
+        eval(&program, &mut env).expect("Evaluation failed")
     }
 
     fn test_integer_object(obj: &Box<dyn Object>, expected: i64) -> bool {
