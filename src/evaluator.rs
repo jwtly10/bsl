@@ -260,8 +260,11 @@ fn eval_infix_expression(
     } else if left.type_() == ObjectType::Boolean && right.type_() == ObjectType::Boolean {
         let left = left.as_any().downcast_ref::<Boolean>().unwrap();
         let right = right.as_any().downcast_ref::<Boolean>().unwrap();
-
         eval_boolean_infix_expression(operator, left, right)
+    } else if left.type_() == ObjectType::StringLit && right.type_() == ObjectType::StringLit {
+        let left = left.as_any().downcast_ref::<StringLit>().unwrap();
+        let right = right.as_any().downcast_ref::<StringLit>().unwrap();
+        eval_string_infix_expression(operator, left, right)
     } else if left.type_() != right.type_() {
         Ok(new_error(format!(
             "type mismatch: {} {} {}",
@@ -276,6 +279,22 @@ fn eval_infix_expression(
             operator,
             right.type_()
         )))
+    }
+}
+
+fn eval_string_infix_expression(
+    operator: &str,
+    left: &StringLit,
+    right: &StringLit,
+) -> Result<Box<dyn Object>, EvalError> {
+    match operator {
+        "+" => Ok(Box::new(StringLit::new(left.value.clone() + &right.value))),
+        _ => Ok(new_error(format!(
+            "unknown operator: {} {} {}",
+            left.type_(),
+            operator,
+            right.type_()
+        ))),
     }
 }
 
@@ -519,6 +538,7 @@ mod tests {
                 "unknown operator: BOOLEAN + BOOLEAN",
             ),
             ("foobar", "identifier not found: foobar"),
+            ("\"Hello\" - \"World\"", "unknown operator: STRING - STRING"),
         ];
 
         let mut errs = 0;
@@ -667,6 +687,23 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_string_concatenation() {
+        let input = "\"Hello\" + \" \" + \"World!\"";
+
+        let evaluated = test_eval(input);
+
+        match evaluated.type_() {
+            ObjectType::StringLit => {
+                let string = evaluated.as_any().downcast_ref::<StringLit>().unwrap();
+                if string.value != "Hello World!" {
+                    panic!("Expected 'Hello World!', got: {}", string.value);
+                }
+            }
+            _ => panic!("Expected String, got: {:?}", evaluated),
+        }
+    }
+
     // **************************************************** //
     // ***************** Helper functions ***************** //
     // **************************************************** //
@@ -693,10 +730,7 @@ mod tests {
     }
 
     fn test_null_object(obj: &Box<dyn Object>) -> bool {
-        match obj.type_() {
-            ObjectType::Null => true,
-            _ => false,
-        }
+        matches!(obj.type_(), ObjectType::Null)
     }
 
     fn test_boolean_object(obj: &Box<dyn Object>, expected: bool) -> bool {
