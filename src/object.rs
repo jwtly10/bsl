@@ -11,6 +11,8 @@ pub enum ObjectType {
     Boolean,
     StringLit,
 
+    BuiltIn,
+
     Return,
     Function,
     Error,
@@ -24,6 +26,8 @@ impl std::fmt::Display for ObjectType {
             ObjectType::Boolean => write!(f, "BOOLEAN"),
             ObjectType::StringLit => write!(f, "STRING"),
 
+            ObjectType::BuiltIn => write!(f, "BUILT_IN"),
+
             ObjectType::Return => write!(f, "RETURN_VALUE"),
             ObjectType::Function => write!(f, "FUNCTION"),
             ObjectType::Error => write!(f, "ERROR"),
@@ -32,7 +36,7 @@ impl std::fmt::Display for ObjectType {
     }
 }
 
-pub trait Object: Any + std::fmt::Debug {
+pub trait Object: Any + std::fmt::Debug + Send + Sync {
     fn type_(&self) -> ObjectType;
     fn inspect(&self) -> String;
     fn as_any(&self) -> &dyn Any;
@@ -43,6 +47,41 @@ pub trait Object: Any + std::fmt::Debug {
 impl Clone for Box<dyn Object> {
     fn clone(&self) -> Self {
         self.clone_box()
+    }
+}
+
+pub type BuiltInFunc = fn(Vec<Box<dyn Object>>) -> Box<dyn Object>;
+
+#[derive(Debug, Clone)]
+pub struct BuiltIn {
+    pub func: BuiltInFunc,
+}
+
+impl Object for BuiltIn {
+    fn type_(&self) -> ObjectType {
+        ObjectType::BuiltIn
+    }
+
+    fn inspect(&self) -> String {
+        "builtin function".to_string()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
+    }
+}
+
+impl BuiltIn {
+    pub fn new(func: BuiltInFunc) -> Self {
+        BuiltIn { func }
+    }
+
+    pub fn call(&self, args: Vec<Box<dyn Object>>) -> Box<dyn Object> {
+        (self.func)(args)
     }
 }
 
@@ -240,4 +279,8 @@ impl Null {
     pub fn new() -> Self {
         Null {}
     }
+}
+
+pub fn new_error(msg: String) -> Box<dyn Object> {
+    Box::new(Error { message: msg })
 }

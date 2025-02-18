@@ -1,7 +1,9 @@
 use crate::ast::{BlockStatement, Expression, Identifier, Program, Statement};
+use crate::builtins::BUILTINS;
 use crate::environment::Environment;
 use crate::object::{
-    Boolean, Error, Function, Integer, Null, Object, ObjectType, Return, StringLit,
+    new_error, Boolean, BuiltIn, Error, Function, Integer, Null, Object, ObjectType, Return,
+    StringLit,
 };
 use std::fmt;
 
@@ -137,13 +139,16 @@ fn apply_function(func: Box<dyn Object>, args: Vec<Box<dyn Object>>) -> Box<dyn 
             match evaluated {
                 Ok(obj) => {
                     if obj.type_() == ObjectType::Return {
-                        let return_value = obj.as_any().downcast_ref::<Return>().unwrap();
                         return unwrap_return_value(obj);
                     }
                     obj
                 }
                 Err(_) => evaluated.unwrap(),
             }
+        }
+        ObjectType::BuiltIn => {
+            let function = func.as_any().downcast_ref::<BuiltIn>().unwrap();
+            function.call(args)
         }
         _ => new_error(format!("not a function: {}", func.type_())),
     }
@@ -222,13 +227,15 @@ fn eval_identifier(
     ident: &Identifier,
     env: &mut Environment,
 ) -> Result<Box<dyn Object>, EvalError> {
-    match env.get(ident.value.as_str()) {
-        Some(obj) => Ok(obj),
-        None => Ok(new_error(format!(
-            "identifier not found: {}",
-            ident.value.as_str()
-        ))),
+    if env.get(ident.value.as_str()).is_some() {
+        return Ok(env.get(ident.value.as_str()).unwrap());
     }
+
+    if BUILTINS.get(ident.value.as_str()).is_some() {
+        return Ok(BUILTINS.get(ident.value.as_str()).unwrap().clone());
+    }
+
+    Ok(new_error(format!("identifier not found: {}", ident.value)))
 }
 
 fn eval_prefix_expression(
@@ -363,10 +370,6 @@ fn eval_minus_prefix_operator_expression(
         }
         _ => Ok(new_error(format!("unknown operator: -{}", right.type_()))),
     }
-}
-
-fn new_error(msg: String) -> Box<dyn Object> {
-    Box::new(Error { message: msg })
 }
 
 #[cfg(test)]
@@ -539,6 +542,11 @@ mod tests {
             ),
             ("foobar", "identifier not found: foobar"),
             ("\"Hello\" - \"World\"", "unknown operator: STRING - STRING"),
+            ("len(1)", "argument to 'len' not supported, got INTEGER"),
+            (
+                "len(\"one\", \"two\")",
+                "wrong number of arguments. got=2, want=1",
+            ),
         ];
 
         let mut errs = 0;
@@ -701,6 +709,28 @@ mod tests {
                 }
             }
             _ => panic!("Expected String, got: {:?}", evaluated),
+        }
+    }
+
+    #[test]
+    fn test_built_in_functions() {
+        let tests = vec![
+            ("len(\"\")", 0),
+            ("len(\"four\")", 4),
+            ("len(\"hello world\")", 11),
+        ];
+
+        for (input, expected) in tests {
+            let evaluated = test_eval(input);
+            match evaluated.type_() {
+                ObjectType::Integer => {
+                    let integer = evaluated.as_any().downcast_ref::<Integer>().unwrap();
+                    if integer.value != expected {
+                        panic!("Expected {}, got: {}", expected, integer.value);
+                    }
+                }
+                _ => panic!("Expected Integer, got: {:?}", evaluated),
+            }
         }
     }
 
