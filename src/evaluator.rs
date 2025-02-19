@@ -2,7 +2,7 @@ use crate::ast::{BlockStatement, Expression, Identifier, Program, Statement};
 use crate::builtins::BUILTINS;
 use crate::environment::Environment;
 use crate::object::{
-    new_error, Boolean, BuiltIn, Error, Function, Integer, Null, Object, ObjectType, Return,
+    new_error, Array, Boolean, BuiltIn, Error, Function, Integer, Null, Object, ObjectType, Return,
     StringLit,
 };
 use std::fmt;
@@ -85,6 +85,15 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Box<dyn O
 
         Expression::IdentifierExpr(ident) => eval_identifier(ident, env),
 
+        Expression::ArrayExpr(ae) => {
+            let elements = ae
+                .elements
+                .iter()
+                .map(|el| eval_expression(el, env))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(Box::new(Array::new(elements)))
+        }
         Expression::FunctionExpr(fe) => Ok(Box::new(Function::new(
             fe.parameters.clone(),
             fe.body.clone(),
@@ -731,6 +740,32 @@ mod tests {
                 }
                 _ => panic!("Expected Integer, got: {:?}", evaluated),
             }
+        }
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let input = "[1, 2 * 2, 3 + 3]";
+        let evaluated = test_eval(input);
+
+        match evaluated.type_() {
+            ObjectType::Array => {
+                let array = evaluated
+                    .as_any()
+                    .downcast_ref::<crate::object::Array>()
+                    .unwrap();
+                if array.elements.len() != 3 {
+                    panic!("Expected 3 elements, got: {}", array.elements.len());
+                }
+
+                let expected = vec![1, 4, 6];
+                for (i, el) in array.elements.iter().enumerate() {
+                    if !test_integer_object(el, expected[i]) {
+                        panic!("Expected {}, got: {:?}", expected[i], el);
+                    }
+                }
+            }
+            _ => panic!("Expected Array, got: {:?}", evaluated),
         }
     }
 

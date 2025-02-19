@@ -162,6 +162,16 @@ impl Lexer {
                 self.read_char();
                 tok
             }
+            Some('[') => {
+                let tok = new_token(TokenType::Lbracket, self.ch.unwrap());
+                self.read_char();
+                tok
+            }
+            Some(']') => {
+                let tok = new_token(TokenType::Rbracket, self.ch.unwrap());
+                self.read_char();
+                tok
+            }
             Some(';') => {
                 let tok = new_token(TokenType::Semicolon, self.ch.unwrap());
                 self.read_char();
@@ -358,6 +368,7 @@ mod tests {
              10 != 9;\n\
              \"foobar\";\n\
              \"foo bar\";\n\
+             [1, 2];\n\
              ";
 
         let tests = vec![
@@ -437,6 +448,12 @@ mod tests {
             (TokenType::String, "foobar"),
             (TokenType::Semicolon, ";"),
             (TokenType::String, "foo bar"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Lbracket, "["),
+            (TokenType::Int, "1"),
+            (TokenType::Comma, ","),
+            (TokenType::Int, "2"),
+            (TokenType::Rbracket, "]"),
             (TokenType::Semicolon, ";"),
             (TokenType::Eof, ""),
         ];

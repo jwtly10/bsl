@@ -144,6 +144,9 @@ pub enum Expression {
     FunctionExpr(FunctionLiteral),
     CallExpr(CallExpression),
 
+    ArrayExpr(ArrayLiteral),
+    IndexExpr(IndexLiteral),
+
     IfExpr(IfExpression),
     PrefixExpr(PrefixExpression),
     InfixExpr(InfixExpression),
@@ -160,6 +163,9 @@ impl fmt::Display for Expression {
 
             Expression::FunctionExpr(fl) => write!(f, "{}", fl.token.literal),
             Expression::CallExpr(ce) => write!(f, "{}", ce.string()),
+
+            Expression::ArrayExpr(ae) => write!(f, "{}", ae.string()),
+            Expression::IndexExpr(ie) => write!(f, "{}", ie.string()),
 
             Expression::IfExpr(ie) => write!(f, "{}", ie.string()),
             Expression::PrefixExpr(pe) => write!(f, "{}", pe.string()),
@@ -179,6 +185,9 @@ impl Expression {
 
             Expression::FunctionExpr(fl) => fl.token.literal.clone(),
             Expression::CallExpr(ce) => ce.token_literal(),
+
+            Expression::ArrayExpr(ae) => ae.token_literal(),
+            Expression::IndexExpr(ie) => ie.token_literal(),
 
             Expression::IfExpr(ie) => ie.token_literal(),
             Expression::PrefixExpr(pe) => pe.token_literal(),
@@ -207,6 +216,45 @@ impl CallExpression {
         }
         out.push_str(&format!("{}({})", self.function, args.join(", ")));
         out
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ArrayLiteral {
+    pub token: Token,
+    pub elements: Vec<Expression>,
+}
+
+impl ArrayLiteral {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    pub fn string(&self) -> String {
+        let mut out = String::new();
+        let mut elements = Vec::new();
+        for e in &self.elements {
+            elements.push(e.to_string());
+        }
+        out.push_str(&format!("[{}]", elements.join(", ")));
+        out
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IndexLiteral {
+    pub token: Token,
+    pub left: Box<Expression>,
+    pub index: Box<Expression>,
+}
+
+impl IndexLiteral {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    pub fn string(&self) -> String {
+        format!("({}[{}])", self.left, self.index)
     }
 }
 

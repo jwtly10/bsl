@@ -13,6 +13,8 @@ pub enum ObjectType {
 
     BuiltIn,
 
+    Array,
+
     Return,
     Function,
     Error,
@@ -27,6 +29,8 @@ impl std::fmt::Display for ObjectType {
             ObjectType::StringLit => write!(f, "STRING"),
 
             ObjectType::BuiltIn => write!(f, "BUILT_IN"),
+
+            ObjectType::Array => write!(f, "ARRAY"),
 
             ObjectType::Return => write!(f, "RETURN_VALUE"),
             ObjectType::Function => write!(f, "FUNCTION"),
@@ -82,6 +86,36 @@ impl BuiltIn {
 
     pub fn call(&self, args: Vec<Box<dyn Object>>) -> Box<dyn Object> {
         (self.func)(args)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Array {
+    pub elements: Vec<Box<dyn Object>>,
+}
+
+impl Object for Array {
+    fn type_(&self) -> ObjectType {
+        ObjectType::Array
+    }
+
+    fn inspect(&self) -> String {
+        let elements: Vec<String> = self.elements.iter().map(|e| e.inspect()).collect();
+        format!("[{}]", elements.join(", "))
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
+    }
+}
+
+impl Array {
+    pub fn new(elements: Vec<Box<dyn Object>>) -> Self {
+        Array { elements }
     }
 }
 

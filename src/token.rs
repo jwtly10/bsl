@@ -34,6 +34,9 @@ pub enum TokenType {
     Lbrace,
     Rbrace,
 
+    Lbracket,
+    Rbracket,
+
     // Keywords
     Function,
     Let,
@@ -76,6 +79,8 @@ impl std::fmt::Display for TokenType {
             TokenType::Rparen => write!(f, ")"),
             TokenType::Lbrace => write!(f, "{{"),
             TokenType::Rbrace => write!(f, "}}"),
+            TokenType::Lbracket => write!(f, "["),
+            TokenType::Rbracket => write!(f, "["),
 
             // Keywords
             TokenType::Function => write!(f, "FUNCTION"),
