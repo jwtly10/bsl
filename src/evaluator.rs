@@ -94,6 +94,21 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Box<dyn O
 
             Ok(Box::new(Array::new(elements)))
         }
+
+        Expression::IndexExpr(ie) => {
+            let left = match eval_expression(&ie.left, env) {
+                Ok(obj) => obj,
+                Err(e) => return Err(e),
+            };
+
+            let index = match eval_expression(&ie.index, env) {
+                Ok(obj) => obj,
+                Err(e) => return Err(e),
+            };
+
+            eval_index_expression(left, index)
+        }
+
         Expression::FunctionExpr(fe) => Ok(Box::new(Function::new(
             fe.parameters.clone(),
             fe.body.clone(),
@@ -135,6 +150,29 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Box<dyn O
         expr => Err(EvalError::UnknownIdentifier(
             expr.token_literal().to_string(),
         )),
+    }
+}
+
+fn eval_index_expression(
+    left: Box<dyn Object>,
+    index: Box<dyn Object>,
+) -> Result<Box<dyn Object>, EvalError> {
+    match (left.type_(), index.type_()) {
+        (ObjectType::Array, ObjectType::Integer) => {
+            let array = left.as_any().downcast_ref::<Array>().unwrap();
+            let idx = index.as_any().downcast_ref::<Integer>().unwrap().value as usize;
+
+            if idx >= array.elements.len() {
+                return Ok(Box::new(Null::new()));
+            }
+
+            Ok(array.elements[idx].clone())
+        }
+        _ => Ok(new_error(format!(
+            "index operator not supported: {}[{}]",
+            left.type_(),
+            index.type_()
+        ))),
     }
 }
 
@@ -387,6 +425,14 @@ mod tests {
     use crate::lexer::Lexer;
     use crate::object::{Error, Integer, Null, ObjectType, StringLit};
     use crate::parser::Parser;
+
+    pub enum ExpectedValue {
+        Integer(i64),
+        Boolean(bool),
+        StringLit(String),
+        Null,
+        Error(String),
+    }
 
     #[test]
     fn test_eval_integer_expression() {
@@ -766,6 +812,76 @@ mod tests {
                 }
             }
             _ => panic!("Expected Array, got: {:?}", evaluated),
+        }
+    }
+
+    #[test]
+    fn test_array_index_expressions() {
+        let tests = vec![
+            ("[1, 2, 3][0]", ExpectedValue::Integer(1)),
+            ("[1, 2, 3][1]", ExpectedValue::Integer(2)),
+            ("[1, 2, 3][2]", ExpectedValue::Integer(3)),
+            ("let i = 0; [1][i];", ExpectedValue::Integer(1)),
+            ("[1, 2, 3][1 + 1];", ExpectedValue::Integer(3)),
+            (
+                "let myArray = [1, 2, 3]; myArray[2];",
+                ExpectedValue::Integer(3),
+            ),
+            (
+                "let myArray = [1, 2, 3]; myArray[0] + myArray[1] + myArray[2];",
+                ExpectedValue::Integer(6),
+            ),
+            (
+                "let myArray = [1, 2, 3]; let i = myArray[0]; myArray[i]",
+                ExpectedValue::Integer(2),
+            ),
+            ("[1, 2, 3][3]", ExpectedValue::Null),
+            ("[1, 2, 3][-1]", ExpectedValue::Null),
+        ];
+
+        for (input, expected) in tests {
+            match expected {
+                ExpectedValue::Integer(expected) => {
+                    let evaluated = test_eval(input);
+                    if !test_integer_object(&evaluated, expected) {
+                        panic!("Expected: {}, Actual: {:?}", expected, evaluated);
+                    }
+                }
+                ExpectedValue::Null => {
+                    let evaluated = test_eval(input);
+                    if !test_null_object(&evaluated) {
+                        panic!("Expected: Null, Actual: {:?}", evaluated);
+                    }
+                }
+                ExpectedValue::Error(msg) => {
+                    let evaluated = test_eval(input);
+                    if evaluated.type_() != ObjectType::Error {
+                        panic!("Expected: Error, Actual: {:?}", evaluated);
+                    }
+
+                    let err = evaluated.as_any().downcast_ref::<Error>().unwrap();
+                    if err.message != msg {
+                        panic!("Expected: {}, Actual: {}", msg, err.message);
+                    }
+                }
+                ExpectedValue::StringLit(s) => {
+                    let evaluated = test_eval(input);
+                    if evaluated.type_() != ObjectType::StringLit {
+                        panic!("Expected: StringLit, Actual: {:?}", evaluated);
+                    }
+
+                    let string = evaluated.as_any().downcast_ref::<StringLit>().unwrap();
+                    if string.value != s {
+                        panic!("Expected: {}, Actual: {}", s, string.value);
+                    }
+                }
+                ExpectedValue::Boolean(b) => {
+                    let evaluated = test_eval(input);
+                    if !test_boolean_object(&evaluated, b) {
+                        panic!("Expected: {}, Actual: {:?}", b, evaluated);
+                    }
+                }
+            }
         }
     }
 
