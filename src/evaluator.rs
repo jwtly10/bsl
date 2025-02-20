@@ -2,7 +2,7 @@ use crate::ast::{BlockStatement, Expression, Identifier, Program, Statement};
 use crate::builtins::BUILTINS;
 use crate::environment::Environment;
 use crate::object::{
-    new_error, Array, Boolean, BuiltIn, Error, Function, Integer, Null, Object, ObjectType, Return,
+    new_error, Array, Boolean, BuiltIn, Function, Integer, Null, Object, ObjectType, Return,
     StringLit,
 };
 use std::fmt;

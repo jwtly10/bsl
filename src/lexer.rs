@@ -177,6 +177,11 @@ impl Lexer {
                 self.read_char();
                 tok
             }
+            Some(':') => {
+                let tok = new_token(TokenType::Colon, self.ch.unwrap());
+                self.read_char();
+                tok
+            }
             // String literals
             Some('"') => Token::new(TokenType::String, self.read_string()),
             // EOF
@@ -315,42 +320,7 @@ mod tests {
     }
 
     #[test]
-    fn test_next_token_keywords() {
-        let input = "if (5 < 10) {\n\
-                return true;\n\
-             } else {\n\
-                return false;\n\
-             }\n\
-             ";
-
-        let tests = vec![
-            (TokenType::If, "if"),
-            (TokenType::Lparen, "("),
-            (TokenType::Int, "5"),
-            (TokenType::LT, "<"),
-            (TokenType::Int, "10"),
-            (TokenType::Rparen, ")"),
-            (TokenType::Lbrace, "{"),
-            (TokenType::Return, "return"),
-            (TokenType::True, "true"),
-            (TokenType::Semicolon, ";"),
-            (TokenType::Rbrace, "}"),
-            (TokenType::Else, "else"),
-            (TokenType::Lbrace, "{"),
-            (TokenType::Return, "return"),
-            (TokenType::False, "false"),
-            (TokenType::Semicolon, ";"),
-            (TokenType::Rbrace, "}"),
-            (TokenType::Eof, ""),
-        ];
-
-        let lexer = Lexer::new(input.to_string());
-
-        test_case_assertions(lexer, tests)
-    }
-
-    #[test]
-    fn test_next_token_snippet() {
+    fn test_next_token() {
         let input = "let five = 5;\n\
              let ten = 10;\n\
              let add = fn(x, y) {\n\
@@ -369,6 +339,7 @@ mod tests {
              \"foobar\";\n\
              \"foo bar\";\n\
              [1, 2];\n\
+             {\"foo\": \"bar\"}\n\
              ";
 
         let tests = vec![
@@ -455,6 +426,11 @@ mod tests {
             (TokenType::Int, "2"),
             (TokenType::Rbracket, "]"),
             (TokenType::Semicolon, ";"),
+            (TokenType::Lbrace, "{"),
+            (TokenType::String, "foo"),
+            (TokenType::Colon, ":"),
+            (TokenType::String, "bar"),
+            (TokenType::Rbrace, "}"),
             (TokenType::Eof, ""),
         ];
 

@@ -19,6 +19,8 @@ pub enum TokenType {
     Asterisk,
     Slash,
 
+    Colon,
+
     LT,
     GT,
 
@@ -65,6 +67,8 @@ impl std::fmt::Display for TokenType {
             TokenType::Bang => write!(f, "!"),
             TokenType::Asterisk => write!(f, "*"),
             TokenType::Slash => write!(f, "/"),
+
+            TokenType::Colon => write!(f, ":"),
 
             TokenType::LT => write!(f, "<"),
             TokenType::GT => write!(f, ">"),

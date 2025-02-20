@@ -1,8 +1,9 @@
 use crate::ast::Expression::Null;
 use crate::ast::{
     ArrayLiteral, BlockStatement, BooleanLiteral, CallExpression, Expression, ExpressionStatement,
-    FunctionLiteral, Identifier, IfExpression, IndexLiteral, InfixExpression, IntegerLiteral,
-    LetStatement, PrefixExpression, Program, ReturnStatement, Statement, StringLiteral,
+    FunctionLiteral, HashLiteral, Identifier, IfExpression, IndexLiteral, InfixExpression,
+    IntegerLiteral, LetStatement, PrefixExpression, Program, ReturnStatement, Statement,
+    StringLiteral,
 };
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
@@ -149,6 +150,8 @@ impl Parser {
         p.register_prefix(TokenType::Lbracket, Parser::parse_array_literal);
 
         p.register_infix(TokenType::Lbracket, Parser::parse_index_expression);
+
+        p.register_prefix(TokenType::Lbrace, Parser::parse_hash_literal);
 
         Ok(p)
     }
@@ -309,6 +312,35 @@ impl Parser {
             left: Box::new(left),
             index: Box::new(index),
         }))
+    }
+
+    fn parse_hash_literal(&mut self) -> Result<Expression, ParseError> {
+        let token = self.cur_token.clone();
+        let mut pairs = Vec::new();
+
+        while !self.peek_token_is(&TokenType::Rbrace) {
+            self.next_token();
+            let key = self.parse_expression(Precedence::Lowest)?;
+
+            if !self.expect_peek(&TokenType::Colon) {
+                return Ok(Expression::Null);
+            }
+
+            self.next_token();
+            let value = self.parse_expression(Precedence::Lowest)?;
+
+            pairs.push((key, value));
+
+            if !self.peek_token_is(&TokenType::Rbrace) && !self.expect_peek(&TokenType::Comma) {
+                return Ok(Expression::Null);
+            }
+        }
+
+        if !self.expect_peek(&TokenType::Rbrace) {
+            return Ok(Expression::Null);
+        }
+
+        Ok(Expression::HashExpr(HashLiteral { token, pairs }))
     }
 
     fn parse_boolean_literal(&mut self) -> Result<Expression, ParseError> {
@@ -1347,6 +1379,160 @@ mod tests {
             "+",
             &ExpectedValue::Int(1),
         );
+    }
+
+    #[test]
+    fn test_parsing_hash_literals_string_keys() {
+        let input = "{\"one\": 1, \"two\": 2, \"three\": 3}";
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer).unwrap();
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
+
+        let stmt = &program.statements[0];
+        let hash_lit = match stmt {
+            Statement::Expression(expr_stmt) => {
+                if let Expression::HashExpr(hash_lit) = &expr_stmt.expression {
+                    hash_lit
+                } else {
+                    panic!("expr not HashLiteral. got='{:?}'", expr_stmt.expression)
+                }
+            }
+            _ => panic!("stmt not ExpressionStatement. got='{:?}'", stmt),
+        };
+
+        if hash_lit.pairs.len() != 3 {
+            panic!(
+                "hash_lit.pairs has not 3 pairs. got='{:?}'",
+                hash_lit.pairs.len()
+            );
+        }
+
+        let expected = vec![("one", 1), ("two", 2), ("three", 3)];
+
+        for (key, value) in expected {
+            let pair = hash_lit
+                .pairs
+                .iter()
+                .find(|(k, _)| -> bool { k.token_literal() == key });
+
+            if pair.is_none() {
+                panic!("no pair for key '{}'", key);
+            }
+
+            let (_, v) = pair.unwrap();
+            if !test_integer_literal(v, value) {
+                panic!("test_integer_literal failed for value");
+            }
+        }
+    }
+
+    #[test]
+    fn test_parsing_empty_hash_literal() {
+        let input = "{}";
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer).unwrap();
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
+
+        let stmt = &program.statements[0];
+        let hash_lit = match stmt {
+            Statement::Expression(expr_stmt) => {
+                if let Expression::HashExpr(hash_lit) = &expr_stmt.expression {
+                    hash_lit
+                } else {
+                    panic!("expr not HashLiteral. got='{:?}'", expr_stmt.expression)
+                }
+            }
+            _ => panic!("stmt not ExpressionStatement. got='{:?}'", stmt),
+        };
+
+        if hash_lit.pairs.len() != 0 {
+            panic!(
+                "hash_lit.pairs has not 0 pairs. got='{:?}'",
+                hash_lit.pairs.len()
+            );
+        }
+    }
+
+    #[test]
+    fn test_parsing_hash_literals_with_expression() {
+        let input = "{\"one\": 0 + 1, \"two\": 10 - 8, \"three\": 15 / 5}";
+
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer).unwrap();
+        let program = parser.parse_program();
+        check_parser_errors(&parser);
+
+        let stmt = &program.statements[0];
+        let hash_lit = match stmt {
+            Statement::Expression(expr_stmt) => {
+                if let Expression::HashExpr(hash_lit) = &expr_stmt.expression {
+                    hash_lit
+                } else {
+                    panic!("expr not HashLiteral. got='{:?}'", expr_stmt.expression)
+                }
+            }
+            _ => panic!("stmt not ExpressionStatement. got='{:?}'", stmt),
+        };
+
+        if hash_lit.pairs.len() != 3 {
+            panic!(
+                "hash_lit.pairs has not 3 pairs. got='{:?}'",
+                hash_lit.pairs.len()
+            );
+        }
+
+        type TestFn = Box<dyn Fn(&Expression) -> bool>;
+
+        let tests: Vec<(&str, TestFn)> = vec![
+            (
+                "one",
+                Box::new(|expr: &Expression| {
+                    test_infix_expression(expr, &ExpectedValue::Int(0), "+", &ExpectedValue::Int(1))
+                }),
+            ),
+            (
+                "two",
+                Box::new(|expr: &Expression| {
+                    test_infix_expression(
+                        expr,
+                        &ExpectedValue::Int(10),
+                        "-",
+                        &ExpectedValue::Int(8),
+                    )
+                }),
+            ),
+            (
+                "three",
+                Box::new(|expr: &Expression| {
+                    test_infix_expression(
+                        expr,
+                        &ExpectedValue::Int(15),
+                        "/",
+                        &ExpectedValue::Int(5),
+                    )
+                }),
+            ),
+        ];
+
+        for (key, test_fn) in tests {
+            let pair = hash_lit
+                .pairs
+                .iter()
+                .find(|(k, _)| -> bool { k.token_literal() == key });
+
+            if pair.is_none() {
+                panic!("no pair for key '{}'", key);
+            }
+
+            let (_, v) = pair.unwrap();
+            if !test_fn(v) {
+                panic!("test failed for key '{}'", key);
+            }
+        }
     }
 
     // **************************************************** //

@@ -147,6 +147,8 @@ pub enum Expression {
     ArrayExpr(ArrayLiteral),
     IndexExpr(IndexLiteral),
 
+    HashExpr(HashLiteral),
+
     IfExpr(IfExpression),
     PrefixExpr(PrefixExpression),
     InfixExpr(InfixExpression),
@@ -166,6 +168,8 @@ impl fmt::Display for Expression {
 
             Expression::ArrayExpr(ae) => write!(f, "{}", ae.string()),
             Expression::IndexExpr(ie) => write!(f, "{}", ie.string()),
+
+            Expression::HashExpr(he) => write!(f, "{}", he.string()),
 
             Expression::IfExpr(ie) => write!(f, "{}", ie.string()),
             Expression::PrefixExpr(pe) => write!(f, "{}", pe.string()),
@@ -188,6 +192,8 @@ impl Expression {
 
             Expression::ArrayExpr(ae) => ae.token_literal(),
             Expression::IndexExpr(ie) => ie.token_literal(),
+
+            Expression::HashExpr(he) => he.token_literal(),
 
             Expression::IfExpr(ie) => ie.token_literal(),
             Expression::PrefixExpr(pe) => pe.token_literal(),
@@ -237,6 +243,28 @@ impl ArrayLiteral {
             elements.push(e.to_string());
         }
         out.push_str(&format!("[{}]", elements.join(", ")));
+        out
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct HashLiteral {
+    pub token: Token,
+    pub pairs: Vec<(Expression, Expression)>,
+}
+
+impl HashLiteral {
+    pub fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    pub fn string(&self) -> String {
+        let mut out = String::new();
+        let mut pairs = Vec::new();
+        for (k, v) in &self.pairs {
+            pairs.push(format!("{}: {}", k, v));
+        }
+        out.push_str(&format!("{{{}}}", pairs.join(", ")));
         out
     }
 }
