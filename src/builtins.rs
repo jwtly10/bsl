@@ -7,6 +7,10 @@ lazy_static! {
     pub static ref BUILTINS: HashMap<&'static str, Box<dyn Object>> = {
         let mut m = HashMap::new();
         m.insert(
+            "print",
+            Box::new(BuiltIn::new(builtin_print)) as Box<dyn Object>,
+        );
+        m.insert(
             "len",
             Box::new(BuiltIn::new(builtin_len)) as Box<dyn Object>,
         );
@@ -28,6 +32,13 @@ lazy_static! {
         );
         m
     };
+}
+
+fn builtin_print(args: Vec<Box<dyn Object>>) -> Box<dyn Object> {
+    for arg in args {
+        println!("{}", arg.inspect());
+    }
+    Box::new(Null::new())
 }
 
 fn builtin_len(args: Vec<Box<dyn Object>>) -> Box<dyn Object> {
