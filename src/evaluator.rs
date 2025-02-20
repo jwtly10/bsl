@@ -1,10 +1,11 @@
-use crate::ast::{BlockStatement, Expression, Identifier, Program, Statement};
+use crate::ast::{BlockStatement, Expression, HashLiteral, Identifier, Program, Statement};
 use crate::builtins::BUILTINS;
 use crate::environment::Environment;
 use crate::object::{
-    new_error, Array, Boolean, BuiltIn, Function, Integer, Null, Object, ObjectType, Return,
-    StringLit,
+    new_error, Array, Boolean, BuiltIn, Function, Hash, HashPair, Hashable, Integer, Null, Object,
+    ObjectType, Return, StringLit,
 };
+use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug, PartialEq)]
@@ -95,6 +96,8 @@ fn eval_expression(expr: &Expression, env: &mut Environment) -> Result<Box<dyn O
             Ok(Box::new(Array::new(elements)))
         }
 
+        Expression::HashExpr(hl) => eval_hash_literal(hl, env),
+
         Expression::IndexExpr(ie) => {
             let left = match eval_expression(&ie.left, env) {
                 Ok(obj) => obj,
@@ -168,6 +171,7 @@ fn eval_index_expression(
 
             Ok(array.elements[idx].clone())
         }
+        (ObjectType::Hash, _) => eval_hash_index_expression(left, index),
         _ => Ok(new_error(format!(
             "index operator not supported: {}[{}]",
             left.type_(),
@@ -218,6 +222,58 @@ fn unwrap_return_value(obj: Box<dyn Object>) -> Box<dyn Object> {
     }
 
     obj
+}
+
+fn eval_hash_literal(
+    node: &HashLiteral,
+    env: &mut Environment,
+) -> Result<Box<dyn Object>, EvalError> {
+    let mut pairs = HashMap::new();
+
+    for (key_node, value_node) in &node.pairs {
+        let key = eval_expression(key_node, env)?;
+
+        let hash_key = if let Some(int) = key.as_any().downcast_ref::<Integer>() {
+            int.hash_key()
+        } else if let Some(str) = key.as_any().downcast_ref::<StringLit>() {
+            str.hash_key()
+        } else if let Some(bool) = key.as_any().downcast_ref::<Boolean>() {
+            bool.hash_key()
+        } else {
+            return Ok(new_error(format!("unusable as hash key: {}", key.type_())));
+        };
+
+        let value = eval_expression(value_node, env)?;
+
+        pairs.insert(hash_key, HashPair::new(key, value));
+    }
+
+    Ok(Box::new(Hash { pairs }))
+}
+
+fn eval_hash_index_expression(
+    hash: Box<dyn Object>,
+    index: Box<dyn Object>,
+) -> Result<Box<dyn Object>, EvalError> {
+    let hash_obj = hash.as_any().downcast_ref::<Hash>().unwrap();
+
+    let hash_key = if let Some(int) = index.as_any().downcast_ref::<Integer>() {
+        int.hash_key()
+    } else if let Some(str) = index.as_any().downcast_ref::<StringLit>() {
+        str.hash_key()
+    } else if let Some(bool) = index.as_any().downcast_ref::<Boolean>() {
+        bool.hash_key()
+    } else {
+        return Ok(new_error(format!(
+            "unusable as hash key: {}",
+            index.type_()
+        )));
+    };
+
+    match hash_obj.pairs.get(&hash_key) {
+        Some(pair) => Ok(pair.value.clone()),
+        None => Ok(Box::new(Null::new())),
+    }
 }
 
 fn eval_block_statement(
@@ -423,7 +479,7 @@ fn eval_minus_prefix_operator_expression(
 mod tests {
     use super::*;
     use crate::lexer::Lexer;
-    use crate::object::{Error, Integer, Null, ObjectType, StringLit};
+    use crate::object::{Error, Hashable, Integer, Null, ObjectType, StringLit};
     use crate::parser::Parser;
 
     pub enum ExpectedValue {
@@ -601,6 +657,10 @@ mod tests {
             (
                 "len(\"one\", \"two\")",
                 "wrong number of arguments. got=2, want=1",
+            ),
+            (
+                "{\"name\": \"Monkey\"}[fn(x) { x }];",
+                "unusable as hash key: FUNCTION",
             ),
         ];
 
@@ -880,6 +940,107 @@ mod tests {
                     if !test_boolean_object(&evaluated, b) {
                         panic!("Expected: {}, Actual: {:?}", b, evaluated);
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let input = "\
+            let two = \"two\";
+            {
+                \"one\": 10 - 9,
+                two: 1 + 1,
+                \"thr\" + \"ee\": 6 / 2,
+                4: 4,
+                true: 5,
+                false: 6
+            }";
+
+        let evaluated = test_eval(input);
+
+        match evaluated.type_() {
+            ObjectType::Hash => {
+                let hash = evaluated
+                    .as_any()
+                    .downcast_ref::<crate::object::Hash>()
+                    .unwrap();
+                let expected = vec![
+                    (
+                        StringLit::new("one".to_string()).hash_key(),
+                        ExpectedValue::Integer(1),
+                    ),
+                    (
+                        StringLit::new("two".to_string()).hash_key(),
+                        ExpectedValue::Integer(2),
+                    ),
+                    (
+                        StringLit::new("three".to_string()).hash_key(),
+                        ExpectedValue::Integer(3),
+                    ),
+                    (Integer::new(4).hash_key(), ExpectedValue::Integer(4)),
+                    (Boolean::new(true).hash_key(), ExpectedValue::Integer(5)),
+                    (Boolean::new(false).hash_key(), ExpectedValue::Integer(6)),
+                ];
+
+                if hash.pairs.len() != expected.len() {
+                    panic!(
+                        "Expected {} pairs, got: {}",
+                        expected.len(),
+                        hash.pairs.len()
+                    );
+                }
+
+                for (expectedKey, expectedValue) in expected {
+                    let pair = hash.pairs.get(&expectedKey).unwrap();
+                    match expectedValue {
+                        ExpectedValue::Integer(expected) => {
+                            if !test_integer_object(&pair.value, expected) {
+                                panic!("Expected: {}, Actual: {:?}", expected, pair.value);
+                            }
+                        }
+                        _ => panic!("Expected Integer, got: {:?}", pair.value),
+                    }
+                }
+            }
+            _ => panic!("Expected Hash, got: {:?}", evaluated),
+        }
+    }
+
+    #[test]
+    fn test_hash_index_expressions() {
+        let tests = vec![
+            ("{\"foo\": 5}[\"foo\"]", ExpectedValue::Integer(5)),
+            ("{\"foo\": 5}[\"bar\"]", ExpectedValue::Null),
+            (
+                "let key = \"foo\"; {\"foo\": 5}[key]",
+                ExpectedValue::Integer(5),
+            ),
+            ("{}[\"foo\"]", ExpectedValue::Null),
+            ("{5: 5}[5]", ExpectedValue::Integer(5)),
+            ("{true: 5}[true]", ExpectedValue::Integer(5)),
+            ("{false: 5}[false]", ExpectedValue::Integer(5)),
+        ];
+
+        for (input, expected) in tests {
+            let evaluated = test_eval(input);
+            match expected {
+                ExpectedValue::Integer(expected) => {
+                    if !test_integer_object(&evaluated, expected) {
+                        panic!("Expected: {}, Actual: {:?}", expected, evaluated);
+                    }
+                }
+                ExpectedValue::Null => {
+                    if !test_null_object(&evaluated) {
+                        panic!("Expected: Null, Actual: {:?}", evaluated);
+                    }
+                }
+                _ => {
+                    panic!(
+                        "Expected Integer or null expected values, got: {:?}",
+                        evaluated
+                    );
                 }
             }
         }

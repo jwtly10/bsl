@@ -1,11 +1,13 @@
-use std::any::Any;
-
 use crate::{
     ast::{BlockStatement, Identifier},
     environment::Environment,
 };
+use fnv::FnvHasher;
+use std::any::Any;
+use std::collections::HashMap;
+use std::hash::Hasher;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ObjectType {
     Integer,
     Boolean,
@@ -14,6 +16,8 @@ pub enum ObjectType {
     BuiltIn,
 
     Array,
+
+    Hash,
 
     Return,
     Function,
@@ -32,11 +36,19 @@ impl std::fmt::Display for ObjectType {
 
             ObjectType::Array => write!(f, "ARRAY"),
 
+            ObjectType::Hash => write!(f, "HASH"),
+
             ObjectType::Return => write!(f, "RETURN_VALUE"),
             ObjectType::Function => write!(f, "FUNCTION"),
             ObjectType::Error => write!(f, "ERROR"),
             ObjectType::Null => write!(f, "NULL"),
         }
+    }
+}
+
+impl std::hash::Hash for ObjectType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
     }
 }
 
@@ -53,6 +65,27 @@ impl Clone for Box<dyn Object> {
         self.clone_box()
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct HashKey {
+    pub type_: ObjectType,
+    pub value: u64,
+}
+
+impl std::hash::Hash for HashKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.type_.hash(state);
+        self.value.hash(state);
+    }
+}
+
+impl PartialEq for HashKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.type_ == other.type_ && self.value == other.value
+    }
+}
+
+impl Eq for HashKey {}
 
 pub type BuiltInFunc = fn(Vec<Box<dyn Object>>) -> Box<dyn Object>;
 
@@ -86,6 +119,85 @@ impl BuiltIn {
 
     pub fn call(&self, args: Vec<Box<dyn Object>>) -> Box<dyn Object> {
         (self.func)(args)
+    }
+}
+
+pub trait Hashable {
+    fn hash_key(&self) -> HashKey;
+}
+
+#[derive(Debug, Clone)]
+pub struct HashPair {
+    pub key: Box<dyn Object>,
+    pub value: Box<dyn Object>,
+}
+
+impl HashPair {
+    pub fn new(key: Box<dyn Object>, value: Box<dyn Object>) -> Self {
+        HashPair { key, value }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Hash {
+    pub pairs: HashMap<HashKey, HashPair>,
+}
+
+impl Hash {
+    pub fn get(&self, key: &Box<dyn Object>) -> Option<&Box<dyn Object>> {
+        if let Some(int) = key.as_any().downcast_ref::<Integer>() {
+            return self.pairs.get(&int.hash_key()).map(|pair| &pair.value);
+        } else if let Some(boolean) = key.as_any().downcast_ref::<Boolean>() {
+            return self.pairs.get(&boolean.hash_key()).map(|pair| &pair.value);
+        } else if let Some(string) = key.as_any().downcast_ref::<StringLit>() {
+            return self.pairs.get(&string.hash_key()).map(|pair| &pair.value);
+        }
+        None
+    }
+
+    pub fn set(&mut self, key: Box<dyn Object>, value: Box<dyn Object>) -> Option<Box<dyn Object>> {
+        // Try to cast the key to a hashable type
+        if let Some(int) = key.as_any().downcast_ref::<Integer>() {
+            let hash_key = int.hash_key();
+            let pair = HashPair::new(key, value.clone());
+            self.pairs.insert(hash_key, pair);
+            Some(value)
+        } else if let Some(boolean) = key.as_any().downcast_ref::<Boolean>() {
+            let hash_key = boolean.hash_key();
+            let pair = HashPair::new(key, value.clone());
+            self.pairs.insert(hash_key, pair);
+            Some(value)
+        } else if let Some(string) = key.as_any().downcast_ref::<StringLit>() {
+            let hash_key = string.hash_key();
+            let pair = HashPair::new(key, value.clone());
+            self.pairs.insert(hash_key, pair);
+            Some(value)
+        } else {
+            None
+        }
+    }
+}
+
+impl Object for Hash {
+    fn type_(&self) -> ObjectType {
+        ObjectType::Hash
+    }
+
+    fn inspect(&self) -> String {
+        let pairs: Vec<String> = self
+            .pairs
+            .values()
+            .map(|pair| format!("{}: {}", pair.key.inspect(), pair.value.inspect()))
+            .collect();
+        format!("{{{}}}", pairs.join(", "))
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn clone_box(&self) -> Box<dyn Object> {
+        Box::new(self.clone())
     }
 }
 
@@ -148,6 +260,15 @@ impl Integer {
     }
 }
 
+impl Hashable for Integer {
+    fn hash_key(&self) -> HashKey {
+        HashKey {
+            type_: self.type_(),
+            value: self.value as u64,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Boolean {
     pub value: bool,
@@ -177,6 +298,15 @@ impl Boolean {
     }
 }
 
+impl Hashable for Boolean {
+    fn hash_key(&self) -> HashKey {
+        HashKey {
+            type_: self.type_(),
+            value: if self.value { 1 } else { 0 },
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct StringLit {
     pub value: String,
@@ -185,6 +315,17 @@ pub struct StringLit {
 impl StringLit {
     pub fn new(value: String) -> Self {
         StringLit { value }
+    }
+}
+
+impl Hashable for StringLit {
+    fn hash_key(&self) -> HashKey {
+        let mut hasher = FnvHasher::default();
+        hasher.write(self.value.as_bytes());
+        HashKey {
+            type_: self.type_(),
+            value: hasher.finish(),
+        }
     }
 }
 
@@ -317,4 +458,29 @@ impl Null {
 
 pub fn new_error(msg: String) -> Box<dyn Object> {
     Box::new(Error { message: msg })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_string_hash_key() {
+        let hello1 = StringLit::new("Hello World".to_string());
+        let hello2 = StringLit::new("Hello World".to_string());
+        let diff1 = StringLit::new("My name is johnny".to_string());
+        let diff2 = StringLit::new("My name is johnny".to_string());
+
+        if hello1.hash_key() != hello2.hash_key() {
+            panic!("strings with same content have different hash keys");
+        }
+
+        if diff1.hash_key() != diff2.hash_key() {
+            panic!("strings with same content have different hash keys");
+        }
+
+        if hello1.hash_key() == diff1.hash_key() {
+            panic!("strings with different content have same hash keys");
+        }
+    }
 }
